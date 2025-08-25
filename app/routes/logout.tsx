@@ -1,0 +1,23 @@
+// app/routes/logout.tsx
+import { useEffect, useRef } from 'react';
+import { useNavigate } from '@remix-run/react';
+
+export default function Logout() {
+  const navigate = useNavigate();
+  const hasLoggedOut = useRef(false); // ✅ 중복 실행 방지용
+
+  useEffect(() => {
+    if (!hasLoggedOut.current) {
+      sessionStorage.clear();
+      sessionStorage.removeItem("email");
+      sessionStorage.removeItem("fullName");
+      sessionStorage.removeItem("nickName");
+
+      alert("로그아웃 되었습니다."); // ✅ 1번만 실행됨
+      hasLoggedOut.current = true;
+      navigate('/login');
+    }
+  }, []);
+
+  return null; // 아무것도 렌더링하지 않음
+}
