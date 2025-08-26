@@ -291,6 +291,7 @@ export default function Login() {
         </form>
 
         {/* Divider */}
+        {/*
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <div className={`w-full border-t ${theme === 'dark' ? 'border-slate-600' : 'border-slate-300'}`} />
@@ -299,8 +300,9 @@ export default function Login() {
             <span className={`px-4 ${theme === 'dark' ? 'bg-slate-800' : 'bg-white'} ${textSecondary}`}>Or</span>
           </div>
         </div>
-
+        */}
         {/* Social Login Buttons */}
+        {/*
         <div className="grid grid-cols-4 gap-3">
           <button
             onClick={() => handleSocialLogin('google')}
@@ -341,7 +343,7 @@ export default function Login() {
             </svg>
           </button>
         </div>
-
+        */}
         {/* Sign Up Link */}
         <div className="text-center">
           <span className={`text-sm ${textSecondary}`}>
