@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import { useThemeStore } from '@/stores/themeStore';
 import { Bot, ChartLine, CircleDollarSign, OctagonAlert, ShoppingCart } from 'lucide-react';
 
+
 export const meta: MetaFunction = () => {
   return [
     { title: "회사소개 - TRADING GEAR" },
