@@ -16,6 +16,7 @@ HTF_INTERVAL = "1h"        # HTF(상위) 추세 확인 주기
 KLINE_LIMIT = 500          # 최근 봉 개수
 REFRESH_MS = 5000          # 갱신 주기(ms)
 
+
 # 시그널/리스크 파라미터
 ATR_MULT = 1.2             # 디스플레이스먼트 강화(몸통 > ATR*k)
 OB_LOOKBACK = 6            # 마지막 반대색 캔들 탐색 범위
