@@ -1,0 +1,18 @@
+<?php
+include './config/dbconn.php';
+
+//$sql = "SELECT * FROM users";
+//$result = $conn->query($sql);
+
+// INSERT
+$stmt = $conn->prepare("INSERT INTO tradingear_member (id_email, pwd, full_name, nick_name, api_key, trading_center, grade) VALUES (?, ?, ?, ?, ?, ?, ?)");
+$stmt->bind_param("ssssssi", $id_email, $pwd, $full_name, $nick_name, $api_key, $trading_center, $grade);
+$id_email = $_POST['email'];
+$pwd = $_POST['password'];
+$full_name = $_POST['fullName'];
+$nick_name = $_POST['nickName'];
+$api_key = $_POST['apiKey'];
+$trading_center = $_POST['tradingCenter'];
+$grade = 1;
+$stmt->execute();
+?>

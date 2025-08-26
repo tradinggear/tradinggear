@@ -1,0 +1,31 @@
+<?php
+// CORS 허용
+header("Access-Control-Allow-Origin: *"); // 또는 특정 도메인
+header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+
+// OPTIONS 요청 처리 (사전 요청)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+include './config/dbconn.php';
+
+//$sql = "SELECT * FROM users";
+//$result = $conn->query($sql);
+
+// INSERT
+$stmt = $conn->prepare("INSERT INTO tradingear_member (id_email, pwd, full_name, nick_name, api_key, trading_center, grade) VALUES (?, ?, ?, ?, ?, ?, ?)");
+$stmt->bind_param("ssssssi", $id_email, $hash, $full_name, $nick_name, $api_key, $trading_center, $grade);
+$id_email = $_POST['email'];
+$pwd = $_POST['password'];
+// 해시 생성 (BCRYPT 알고리즘, 솔트 자동 포함)
+$hash = password_hash($pwd, PASSWORD_DEFAULT);
+$full_name = $_POST['fullName'];
+$nick_name = $_POST['nickName'];
+$api_key = $_POST['apiKey'];
+$trading_center = $_POST['tradingCenter'];
+$grade = 1;
+$stmt->execute();
+?>
