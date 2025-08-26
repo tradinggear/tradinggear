@@ -1,5 +1,8 @@
 # main.py
 # FastAPI 단일 파일: 경량 차트 + OB 박스(테두리만) + 확대/축소 컨트롤
+# 색상 규칙:
+#   - 매수벽(= bullish 수요존)  : 초록 테두리
+#   - 매도벽(= bearish 공급존) : 빨강 테두리  ← 변경
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -105,8 +108,8 @@ def cvd_approx(klines: List[Dict[str, float]]):
 # ---------- OB / Zones ----------
 def detect_ob(klines: List[Dict[str, float]], lookback: int = 300, extend: int = 60):
     """
-    Bullish: 하락 바 b 이후 extend 내 high >= b.high
-    Bearish: 상승 바 b 이후 extend 내 low <= b.low
+    Bullish(매수벽/수요존): 하락 바 b 이후 extend 내 high >= b.high
+    Bearish(매도벽/공급존): 상승 바 b 이후 extend 내 low <= b.low
     end는 최신 바 ts로 확장, 최소 높이 보정, 중복 제거
     """
     n=len(klines)
@@ -125,12 +128,12 @@ def detect_ob(klines: List[Dict[str, float]], lookback: int = 300, extend: int =
         top=max(b["o"],b["c"],b["h"]); bottom=min(b["o"],b["c"],b["l"])
         fut=klines[i+1:min(i+1+extend,n)]
         if not fut: continue
-        # bullish
+        # bullish = 매수벽(초록)
         if b["c"]<b["o"] and max(x["h"] for x in fut) >= b["h"]:
             h=top-bottom; m=min_height(b["c"], atrs[i] if i<len(atrs) else None)
             if h<m: pad=(m-h)/2; top+=pad; bottom-=pad
             zones.append({"type":"bullish","start":b["t"],"end":last_t,"top":top,"bottom":bottom})
-        # bearish
+        # bearish = 매도벽(빨강)
         if b["c"]>b["o"] and min(x["l"] for x in fut) <= b["l"]:
             h=top-bottom; m=min_height(b["c"], atrs[i] if i<len(atrs) else None)
             if h<m: pad=(m-h)/2; top+=pad; bottom-=pad
@@ -296,7 +299,7 @@ def ui():
     </label>
     <label><input type="checkbox" id="showVWAP" checked> VWAP</label>
     <label><input type="checkbox" id="showTEMA" checked> TEMA(30)</label>
-    <label><input type="checkbox" id="showOB" checked> OB 존(테두리만)</label>
+    <label><input type="checkbox" id="showOB" checked> OB 존(테두리: 매수=초록, 매도=빨강)</label>
     <button id="loadBtn">불러오기</button>
     <button id="runStratBtn">전략계산</button>
     <span class="sep"></span>
@@ -325,7 +328,7 @@ def ui():
   </div>
 
   <div class="footer">
-    OB 박스는 <b>배경 없이 테두리</b>만 그립니다. 확대/축소는 + / − / Reset 버튼을 이용하세요.
+    OB 박스: <span style="color:#34d399">초록=매수벽(수요존)</span>, <span style="color:#f87171">빨강=매도벽(공급존)</span>. 배경 없이 테두리만 표시됩니다.
   </div>
 </div>
 
@@ -387,7 +390,7 @@ function localDetectOb(ks, extend = 150) {
   return out.slice(-20);
 }
 
-// ---- OB 그리기: 테두리만(배경 없음) ----
+// ---- OB 그리기: 테두리만(배경 없음) / 매수=초록, 매도=빨강 ← 변경
 function drawZones(){
   const canvas = $('overlay'); const ctx = canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -402,10 +405,11 @@ function drawZones(){
     ctx.save();
     ctx.beginPath();
     ctx.rect(left, top, w, h);
-    // 테두리 색: 상승 보라, 하락 빨강
-    ctx.strokeStyle = (z.type==='bullish') ? 'rgba(165,105,255,0.95)' : 'rgba(255,105,105,0.95)';
+    const green = 'rgba(52, 211, 153, 0.95)';   // #34d399 (매수)
+    const red   = 'rgba(248, 113, 113, 0.95)';  // #f87171 (매도) ← 파랑→빨강
+    ctx.strokeStyle = (z.type === 'bullish') ? green : red;
     ctx.lineWidth = 2 * devicePixelRatio;
-    ctx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]); // 점선(원하면 제거 가능)
+    ctx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]); // 점선(원하면 제거)
     ctx.stroke();
     ctx.restore();
   });
@@ -441,7 +445,7 @@ async function refreshZones({ forceServer=false } = {}){
   if (!zones || zones.length === 0) {
     const last = lastKs.at(-1);
     if (last) {
-      zones = [{ type:'bullish', start:last.t-3600, end:last.t, top:last.c*1.003, bottom:last.c*0.997 }]; // 디버그 테두리
+      zones = [{ type:'bullish', start:last.t-3600, end:last.t, top:last.c*1.003, bottom:last.c*0.997 }]; // 디버그 테두리(매수색)
       console.warn('Painted a debug OB box since none detected.');
     }
   }
@@ -453,7 +457,6 @@ function zoomBy(factor){
   const ts = chartApi.timeScale();
   const lr = ts.getVisibleLogicalRange();
   const totalBars = Math.max(1, lastKs.length);
-  const total = { from: 0, to: totalBars - 1 };
   if (!lr) { ts.fitContent(); requestAnimationFrame(drawZones); return; }
 
   let from = lr.from, to = lr.to;
@@ -466,8 +469,8 @@ function zoomBy(factor){
   let newTo   = center + newWidth / 2;
 
   // 범위 클램핑
-  if (newFrom < total.from) { const d = total.from - newFrom; newFrom += d; newTo += d; }
-  if (newTo > total.to)     { const d = newTo - total.to;     newFrom -= d; newTo -= d; }
+  if (newFrom < 0) { newTo -= newFrom; newFrom = 0; }
+  if (newTo > totalBars - 1) { newFrom -= (newTo - (totalBars - 1)); newTo = totalBars - 1; }
 
   ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
   requestAnimationFrame(drawZones);
