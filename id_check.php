@@ -15,5 +15,6 @@ include './config/dbconn.php';
 $sql = "SELECT * FROM tradinggear_member where id_email = '".$_POST['email']."'";
 $result = $conn->query($sql);
 
+
 echo $result->num_rows;
 ?>
