@@ -11,7 +11,7 @@ const AdminSidebar = () => {
     { icon: Users, label: '바이낸스오더북', href: '/admin/binance_order_book', path: '/admin/binance_order_book' },  
     { icon: Users, label: '전략그래프', href: '/admin/binance_strategy1', active: true }, 
     { icon: Users, label: '실시간전략그래프', href: 'http://210.114.22.48:8050/app/app_ws/', active: true }, 
-    { icon: Users, label: '실시간전략그래프2', href: 'http://210.114.22.48:8051/', active: true }, 
+    { icon: Users, label: '실시간전략그래프2', href: 'http://210.114.22.48:8052/', active: true }, 
     { icon: BarChart3, label: '전략 리스트', href: '/admin/strategy', path: '/admin/strategy' },
     { icon: UserRoundCheck, label: '승인 대기', href: '/admin/approval', path: '/admin/approval' },
     { icon: BotOff, label: '차단 전략', href: '/admin/cutOff', path: '/admin/cutOff' },

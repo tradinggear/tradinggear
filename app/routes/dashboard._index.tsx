@@ -1043,11 +1043,18 @@ const Dashboard = () => {
                       </TableCell>
                       <TableCell className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
                         <div className="font-medium">₩{item.currentPrice.toLocaleString()}</div>
+                        {/* 
                         <div className={`text-xs ${
                           item.currentPrice > item.averagePrice ? 'text-emerald-600' : 'text-red-600'
                         }`}>
                           {item.currentPrice > item.averagePrice ? '+' : ''}{((item.currentPrice - item.averagePrice) / item.averagePrice * 100).toFixed(2)}%
                         </div>
+                        */}
+                        <div className={`text-xs ${
+                          item.profitRate > 0 ? 'text-emerald-600' : 'text-red-600'
+                        }`}>
+                          {item.profitRate > 0 ? '+' : ''}{item.profitRate.toFixed(2)}%                          
+                        </div>                        
                       </TableCell>
                       <TableCell className={`font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                         ₩{item.averagePrice.toLocaleString()}
