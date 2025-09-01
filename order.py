@@ -203,6 +203,15 @@ if __name__ == "__main__":
     print("SPOT SELL LIMIT:",
           spot.spot_limit_sell("BTCUSDT", price=px*1.02, quantity=0.0002))
 
+    pct = 0.7  # 예: 0.7%로 조절
+    px = spot.price("BTCUSDT")
+    buy_price  = px * (1 - pct/100)
+    sell_price = px * (1 + pct/100)
+
+    spot.spot_limit_buy("BTCUSDT",  price=buy_price,  quantity=0.001)  # GTC
+    spot.spot_limit_sell("BTCUSDT", price=sell_price, quantity=0.001)  # GTC
+
+
     # ---------- 선물: 테스트넷 ----------
     fut = BinanceClient(KEY, SEC, market="futures", testnet=True)
     fut.sync_time()

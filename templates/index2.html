@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>TradingGear — SuperChart-like</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #0e1430; --panel2:#101633; --line:#2b3a78; --text:#e7eaf3;
+    --muted:#90a0c5; --accent:#8ab4ff; --buy:#2dd4bf; --sell:#f87171; --warn:#ffd166;
+  }
+  [data-theme="light"]{
+    --bg: #ffffff; --panel:#f6f7fb; --panel2:#eef0f6; --line:#cfd6ea; --text:#151a2d;
+    --muted:#51607e; --accent:#2f6df6; --buy:#12b89a; --sell:#ea5a60; --warn:#d2a21b;
+  }
+  html,body { height:100%; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { display:flex; flex-direction:column; height:100vh; }
+  header { padding:8px 10px; display:flex; gap:8px; align-items:center; background:var(--panel2); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .group { display:flex; gap:6px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px; }
+  header input, header select, header button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 8px; }
+  header button { cursor:pointer; }
+  .sep { flex:1; }
+  .tag { padding:2px 6px; border-radius:8px; background:var(--panel); border:1px solid var(--line); font-size:12px; color:var(--muted); }
+  .hud { display:flex; gap:10px; flex-wrap:wrap; padding:8px 12px; background:var(--panel); border-bottom:1px dashed var(--line); }
+  .hud .card { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:6px 10px; min-width:120px; }
+  .charts { display:grid; grid-template-rows: 2.5fr 1fr; gap:4px; flex:1; position:relative; }
+  .pane { position:relative; }
+  .pane .chart { position:absolute; inset:0; }
+  .pane canvas.overlay { position:absolute; inset:0; pointer-events:none; z-index:9; }
+  .footer { padding:6px 12px; font-size:12px; color:var(--muted); background:var(--panel); border-top:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  .toolbtn { border:none; background:transparent; padding:4px 8px; border-radius:8px; color:var(--text); }
+  .toolbtn.active { background:var(--panel2); border:1px solid var(--line); }
+  .small { font-size:12px; color:var(--muted); }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; padding:0 6px; border:1px solid var(--line); border-radius:6px; background:var(--panel2); color:var(--text); }
+  .pill { padding:2px 6px; border:1px solid var(--line); border-radius:999px; }
+</style>
+</head>
+<body data-theme="dark">
+<div class="wrap">
+
+  <!-- Top Bar -->
+  <header>
+    <div class="group">
+      <label>심볼 <input id="symbol" value="SOLUSDT" style="width:120px"/></label>
+      <label>인터벌 
+        <select id="interval">
+          <option>1m</option><option>3m</option><option>5m</option>
+          <option selected>15m</option><option>1h</option><option>4h</option><option>1d</option>
+        </select>
+      </label>
+      <button id="loadBtn">불러오기</button>
+      <button id="runStratBtn">전략계산</button>
+    </div>
+
+    <div class="group">
+      <label class="small"><input type="checkbox" id="showVWAP" checked> VWAP</label>
+      <label class="small"><input type="checkbox" id="showTEMA" checked> TEMA(30)</label>
+      <label class="small"><input type="checkbox" id="showOB" checked> OB(초록/빨강)</label>
+      <label class="small"><input type="checkbox" id="showVOL" checked> Vol</label>
+      <label class="small"><input type="checkbox" id="showRSI" checked> RSI(14)</label>
+    </div>
+
+    <div class="group">
+      <button class="toolbtn" data-tool="cursor">커서</button>
+      <button class="toolbtn" data-tool="trend">트렌드</button>
+      <button class="toolbtn" data-tool="hline">수평선</button>
+      <button class="toolbtn" data-tool="rect">박스</button>
+      <button class="toolbtn" data-tool="ruler">룰러</button>
+      <button class="toolbtn" id="magnetBtn">자석 OFF</button>
+      <button class="toolbtn" id="delBtn">삭제(Del)</button>
+      <button class="toolbtn" id="undoBtn">↶</button>
+      <button class="toolbtn" id="redoBtn">↷</button>
+    </div>
+
+    <div class="group">
+      <button class="toolbtn" id="autoBtn">오토스케일</button>
+      <button class="toolbtn" id="logBtn">로그 OFF</button>
+      <button class="toolbtn" id="themeBtn">라이트/다크</button>
+      <button class="toolbtn" id="fullBtn">풀스크린</button>
+      <button class="toolbtn" id="csvBtn">CSV</button>
+      <button class="toolbtn" id="pngBtn">PNG(β)</button>
+    </div>
+
+    <div class="group">
+      <label>비교 <input id="cmpSymbol" placeholder="SOLUSDT" style="width:120px"/></label>
+      <button id="cmpBtn">추가/갱신</button>
+      <span class="small">기준=100</span>
+    </div>
+
+    <div class="group">
+      <label class="small">바수 <input type="range" id="rangeBars" min="50" max="500" value="300"></label>
+      <label class="small">시작 <input type="range" id="rangeStart" min="0" max="200" value="0"></label>
+      <button id="playBtn">▶ 재생</button>
+      <span class="small">KST <span id="nowKST"></span></span>
+    </div>
+
+    <span class="sep"></span>
+    <span class="tag">SuperChart-like</span>
+  </header>
+
+  <!-- HUD -->
+  <div class="hud" id="hud">
+    <div class="card"><div>가격</div><div id="hud_price">-</div></div>
+    <div class="card"><div>VWAP</div><div id="hud_vwap">-</div></div>
+    <div class="card"><div>TEMA(30)</div><div id="hud_tema">-</div></div>
+    <div class="card"><div>ATR(14)</div><div id="hud_atr">-</div></div>
+    <div class="card"><div>ATR%</div><div id="hud_atrp">-</div></div>
+    <div class="card"><div>RSI(14)</div><div id="hud_rsi">-</div></div>
+    <div class="card"><div>VOL</div><div id="hud_vol">-</div></div>
+    <div class="card"><div>Trend</div><div id="hud_trend">-</div></div>
+    <div class="card"><div>Cross</div><div id="hud_data">-</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts">
+    <div class="pane" id="paneMain">
+      <div class="chart" id="chartMain"></div>
+      <canvas class="overlay" id="overlayMain"></canvas>
+    </div>
+    <div class="pane" id="paneSub">
+      <div class="chart" id="chartSub"></div>
+      <canvas class="overlay" id="overlaySub"></canvas>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>OB 박스: <span class="pill" style="color:var(--buy)">초록=매수</span>, <span class="pill" style="color:var(--sell)">빨강=매도</span> (테두리)</span>
+    <span class="small">단축키: <span class="kbd">1</span>커서 <span class="kbd">2</span>트렌드 <span class="kbd">3</span>수평선 <span class="kbd">4</span>박스 <span class="kbd">R</span>룰러 <span class="kbd">Del</span>삭제 <span class="kbd">Ctrl+Z/Y</span> 되/다</span>
+  </div>
+</div>
+
+<script>
+/** ========= 유틸 ========= */
+const api = (p) => p;
+const $   = (id) => document.getElementById(id);
+const dpr = () => window.devicePixelRatio || 1;
+const fmt = (n, d=2)=> (n===null||n===undefined||isNaN(n) ? '-' : Number(n).toFixed(d));
+const nowKST = ()=> new Date(Date.now()+9*3600*1000).toISOString().replace('T',' ').slice(0,19);
+
+function download(filename, text) {
+  const a = document.createElement('a');
+  a.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  a.setAttribute('download', filename);
+  a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+/** ========= 전역 상태 ========= */
+let mainChart, subChart, candleSeries, vwapSeries, temaSeries, volSeries, rsiSeries, cmpSeries;
+let zones = [];
+let lastKs = [];     // 원본 캔들
+let rsiArr = [];     // RSI(14)
+let vwapArr = [];    // VWAP
+let temaArr = [];    // TEMA(30)
+let cmpData = [];    // 비교 심볼 100 기준
+
+// 그리기
+let tool = 'cursor';        // cursor | trend | hline | rect | ruler
+let magnetOn = false;
+let drawings = [];          // {id,type,pts:[{t,p}], ...}
+let selectedId = null;
+let history = [];           // undo
+let future  = [];           // redo
+let playing = false;        // replay
+
+/** ========= 지표 계산 ========= */
+function calcVWAP(ks){
+  let cpv=0, cv=0; return ks.map(k=>{ const tp=(k.h+k.l+k.c)/3; cpv+=tp*k.v; cv+=k.v; return cv>0?cpv/cv:tp; });
+}
+function calcEMA(arr, L){
+  const k=2/(L+1); let p=null; return arr.map(x=>{ p=(p===null?x:(x*k+p*(1-k))); return p; });
+}
+function calcTEMA(closes, L){
+  const e1=calcEMA(closes, L), e2=calcEMA(e1, L), e3=calcEMA(e2, L);
+  return e1.map((_,i)=>3*e1[i]-3*e2[i]+e3[i]);
+}
+function calcRSI(closes, L=14){
+  let gains=0, losses=0; const out=new Array(closes.length).fill(null);
+  for (let i=1;i<closes.length;i++){
+    const ch = closes[i]-closes[i-1];
+    if (i<=L){ if (ch>0) gains+=ch; else losses-=ch; if(i===L){ const rs=gains/(losses||1e-9); out[i]=100-100/(1+rs);} }
+    else{
+      const up = ch>0?ch:0, down = ch<0?(-ch):0;
+      gains = (gains*(L-1)+up)/L; losses=(losses*(L-1)+down)/L;
+      const rs=gains/(losses||1e-9); out[i]=100-100/(1+rs);
+    }
+  }
+  return out;
+}
+
+/** ========= 차트 생성 ========= */
+function buildCharts(){
+  const mainEl = $("chartMain"), subEl = $("chartSub");
+  const overlayMain = $("overlayMain"), overlaySub = $("overlaySub");
+
+  mainChart = LightweightCharts.createChart(mainEl, {
+    width: mainEl.clientWidth, height: mainEl.clientHeight,
+    layout: { background: { type:'solid', color: getComputedStyle(document.body).getPropertyValue('--bg').trim() },
+              textColor: getComputedStyle(document.body).getPropertyValue('--text').trim() },
+    grid: { vertLines: { color: getComputedStyle(document.body).getPropertyValue('--line').trim() },
+            horzLines: { color: getComputedStyle(document.body).getPropertyValue('--line').trim() } },
+    timeScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--line').trim(), timeVisible:true, secondsVisible:false },
+    rightPriceScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--line').trim() },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    watermark: { visible:true, color:'rgba(128,128,128,0.15)', text:'TradingGear SuperChart-like', fontSize: 24, horzAlign:'left', vertAlign:'bottom' },
+  });
+  subChart = LightweightCharts.createChart(subEl, {
+    width: subEl.clientWidth, height: subEl.clientHeight,
+    layout: { background: { type:'solid', color: getComputedStyle(document.body).getPropertyValue('--bg').trim() },
+              textColor: getComputedStyle(document.body).getPropertyValue('--text').trim() },
+    grid: { vertLines: { color: getComputedStyle(document.body).getPropertyValue('--line').trim() },
+            horzLines: { color: getComputedStyle(document.body).getPropertyValue('--line').trim() } },
+    timeScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--line').trim(), timeVisible:true, secondsVisible:false },
+    rightPriceScale: { borderColor: getComputedStyle(document.body).getPropertyValue('--line').trim() },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+
+  candleSeries = mainChart.addCandlestickSeries({
+    upColor: getComputedStyle(document.body).getPropertyValue('--buy').trim(),
+    downColor: getComputedStyle(document.body).getPropertyValue('--sell').trim(),
+    borderUpColor: getComputedStyle(document.body).getPropertyValue('--buy').trim(),
+    borderDownColor: getComputedStyle(document.body).getPropertyValue('--sell').trim(),
+    wickUpColor: getComputedStyle(document.body).getPropertyValue('--buy').trim(),
+    wickDownColor: getComputedStyle(document.body).getPropertyValue('--sell').trim(),
+  });
+  vwapSeries = mainChart.addLineSeries({ color:getComputedStyle(document.body).getPropertyValue('--accent').trim(), lineWidth:1, visible: $('showVWAP').checked });
+  temaSeries = mainChart.addLineSeries({ color:getComputedStyle(document.body).getPropertyValue('--warn').trim(), lineWidth:1, visible: $('showTEMA').checked });
+  cmpSeries  = mainChart.addLineSeries({ color:'#7b61ff', lineWidth:1, priceScaleId:'left', visible:false });
+
+  volSeries  = subChart.addHistogramSeries({ color:getComputedStyle(document.body).getPropertyValue('--muted').trim(), priceFormat:{ type:'volume' }, priceScaleId:'right', visible:$('showVOL').checked });
+  rsiSeries  = subChart.addLineSeries({ color:'#d16fff', lineWidth:1, priceScaleId:'left', visible:$('showRSI').checked });
+
+  // 캔버스 리사이즈
+  function resize(){
+    [ ["chartMain","overlayMain",mainChart], ["chartSub","overlaySub",subChart] ].forEach(([cId, oId, chart])=>{
+      const el = $(cId), ov = $(oId), rect = el.getBoundingClientRect(), ratio = dpr();
+      chart.applyOptions({ width: rect.width, height: rect.height });
+      ov.width  = Math.max(1, Math.floor(rect.width * ratio));
+      ov.height = Math.max(1, Math.floor(rect.height * ratio));
+      ov.style.width = rect.width + 'px';
+      ov.style.height = rect.height + 'px';
+    });
+    drawZones();
+    drawDrawings();
+  }
+  const ro1 = new ResizeObserver(resize); ro1.observe(mainEl);
+  const ro2 = new ResizeObserver(resize); ro2.observe(subEl);
+
+  // 메인 ↔ 서브 타임스케일 동기화
+  const sync = (source, target) => {
+    source.timeScale().subscribeVisibleLogicalRangeChange((r)=>{
+      if (r) target.timeScale().setVisibleLogicalRange(r);
+    });
+  };
+  sync(mainChart, subChart); sync(subChart, mainChart);
+
+  // 크로스헤어 데이터윈도우/RSI/VOL 표시
+  mainChart.subscribeCrosshairMove(param=>{
+    if (!param?.time) { $("hud_data").textContent='-'; return; }
+    const t = param.time;
+    const k = lastKs.find(x=>x.t===t);
+    const i = lastKs.findIndex(x=>x.t===t);
+    if (!k || i<0) return;
+    $("hud_data").textContent = `t:${t} O:${fmt(k.o)} H:${fmt(k.h)} L:${fmt(k.l)} C:${fmt(k.c)}`;
+    $("hud_vol").textContent  = fmt(k.v,0);
+    $("hud_rsi").textContent  = fmt(rsiArr[i] ?? NaN, 2);
+  });
+
+  // 가시범위 바뀌면 오버레이 갱신
+  mainChart.timeScale().subscribeVisibleTimeRangeChange(()=>{ drawZones(); drawDrawings(); });
+}
+
+/** ========= 좌표 변환 ========= */
+function timeToX(chart, t){ const x = chart.timeScale().timeToCoordinate(t); return (x==null)? null : x*dpr(); }
+function priceToY(series, p){ const y = series.priceToCoordinate(p); return (y==null)? null : y*dpr(); }
+function xToTime(chart, x){ const t = chart.timeScale().coordinateToTime(x/dpr()); return t ?? null; }
+function yToPrice(series, y){ const p = series.coordinateToPrice(y/dpr()); return p ?? null; }
+
+/** ========= OB 박스 ========= */
+function drawZones(){
+  const canvas = $('overlayMain'); const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if (!$('showOB').checked) return;
+  zones.forEach(z=>{
+    let x1 = timeToX(mainChart, z.start), x2 = timeToX(mainChart, z.end),
+        y1 = priceToY(candleSeries, z.top), y2 = priceToY(candleSeries, z.bottom);
+    if (x1==null) x1=0; if (x2==null) x2=canvas.width; if (y1==null) y1=0; if (y2==null) y2=canvas.height;
+    const left = Math.min(x1,x2), right = Math.max(x1,x2), top = Math.min(y1,y2), bottom = Math.max(y1,y2);
+    const w = Math.max(1, right-left), h = Math.max(1, bottom-top);
+    const green = 'rgba(52,211,153,0.95)', red='rgba(248,113,113,0.95)';
+    ctx.save(); ctx.beginPath(); ctx.rect(left, top, w, h);
+    ctx.strokeStyle = (z.type==='bullish')? green : red; ctx.lineWidth = 2*dpr();
+    ctx.setLineDash([6*dpr(), 4*dpr()]); ctx.stroke(); ctx.restore();
+  });
+}
+
+/** ========= 드로잉(도형) ========= */
+function pushHistory(){ history.push(JSON.stringify(drawings)); if (history.length>50) history.shift(); future.length=0; }
+function undo(){ if (!history.length) return; future.push(JSON.stringify(drawings)); drawings = JSON.parse(history.pop()); saveLayout(); drawDrawings(); }
+function redo(){ if (!future.length) return; history.push(JSON.stringify(drawings)); drawings = JSON.parse(future.pop()); saveLayout(); drawDrawings(); }
+function saveLayout(){
+  const layout = {
+    symbol:$('symbol').value, interval:$('interval').value,
+    showVWAP:$('showVWAP').checked, showTEMA:$('showTEMA').checked, showOB:$('showOB').checked,
+    showVOL:$('showVOL').checked, showRSI:$('showRSI').checked,
+    magnetOn, tool, drawings, zones, cmpSymbol: $('cmpSymbol').value || '', theme: document.body.getAttribute('data-theme') || 'dark'
+  };
+  localStorage.setItem('tg_superchart_layout', JSON.stringify(layout));
+}
+function loadLayout(){
+  const raw = localStorage.getItem('tg_superchart_layout'); if(!raw) return;
+  try{
+    const o = JSON.parse(raw);
+    $('symbol').value=o.symbol||$('symbol').value; $('interval').value=o.interval||$('interval').value;
+    $('showVWAP').checked=!!o.showVWAP; $('showTEMA').checked=!!o.showTEMA; $('showOB').checked=!!o.showOB;
+    $('showVOL').checked=!!o.showVOL; $('showRSI').checked=!!o.showRSI;
+    magnetOn=!!o.magnetOn; drawings=o.drawings||[]; zones=o.zones||zones; $('cmpSymbol').value=o.cmpSymbol||'';
+    if (o.theme) document.body.setAttribute('data-theme', o.theme);
+    setTool(o.tool||'cursor');
+  }catch(e){}
+}
+
+function setTool(t){
+  tool=t;
+  document.querySelectorAll('.toolbtn[data-tool]').forEach(b=>b.classList.toggle('active', b.dataset.tool===t));
+}
+
+function nearestOHLC(t, p){
+  // 자석: 최근 t에 가장 가까운 캔들의 OHLC로 p 스냅
+  if (!magnetOn || !lastKs.length) return {t,p};
+  // t 로 인접한 인덱스
+  const idx = lastKs.findIndex(k=>k.t===t);
+  let k = (idx>=0? lastKs[idx] : lastKs.reduce((a,b)=> Math.abs(b.t-t)<Math.abs(a.t-t)? b:a, lastKs[0]));
+  const candidates=[k.o,k.h,k.l,k.c];
+  const snap = candidates.reduce((a,b)=> Math.abs(b-p)<Math.abs(a-p)? b:a, candidates[0]);
+  return {t:k.t, p:snap};
+}
+
+function drawDrawings(){
+  const cvs = $('overlayMain'); const ctx = cvs.getContext('2d'); ctx.save();
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  // OB 도 함께 보이도록 순서: OB → (도형) → (선택 강조)
+  drawZones();
+  drawings.forEach(d=>{
+    const color = (d.id===selectedId)? '#ffd166' : '#c4d0ff';
+    ctx.strokeStyle=color; ctx.fillStyle='rgba(196,208,255,0.10)'; ctx.lineWidth=2*dpr(); ctx.setLineDash([]);
+    if (d.type==='trend' && d.pts.length>=2){
+      const [a,b]=d.pts;
+      const x1=timeToX(mainChart,a.t), y1=priceToY(candleSeries,a.p), x2=timeToX(mainChart,b.t), y2=priceToY(candleSeries,b.p);
+      if([x1,y1,x2,y2].some(v=>v==null)) return;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    } else if (d.type==='hline' && d.pts.length>=1){
+      const y=priceToY(candleSeries,d.pts[0].p); if(y==null) return;
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cvs.width,y); ctx.stroke();
+    } else if (d.type==='rect' && d.pts.length>=2){
+      const [a,b]=d.pts;
+      let x1=timeToX(mainChart,a.t), x2=timeToX(mainChart,b.t), y1=priceToY(candleSeries,a.p), y2=priceToY(candleSeries,b.p);
+      if([x1,y1,x2,y2].some(v=>v==null)) return;
+      const left=Math.min(x1,x2), right=Math.max(x1,x2), top=Math.min(y1,y2), bottom=Math.max(y1,y2);
+      ctx.beginPath(); ctx.rect(left,top,right-left,bottom-top); ctx.stroke();
+    } else if (d.type==='ruler' && d.pts.length>=2){
+      const [a,b]=d.pts;
+      let x1=timeToX(mainChart,a.t), y1=priceToY(candleSeries,a.p), x2=timeToX(mainChart,b.t), y2=priceToY(candleSeries,b.p);
+      if([x1,y1,x2,y2].some(v=>v==null)) return;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.setLineDash([4*dpr(),3*dpr()]); ctx.stroke();
+      // 라벨: Δ가격, %, 바수
+      const i1 = lastKs.findIndex(k=>k.t===a.t), i2=lastKs.findIndex(k=>k.t===b.t);
+      if(i1>=0 && i2>=0){
+        const dp = b.p - a.p, pct = (dp / a.p) * 100, bars = Math.abs(i2-i1);
+        const tx = (x1+x2)/2, ty = (y1+y2)/2;
+        const box = `Δ ${fmt(dp)} | ${fmt(pct)}% | ${bars} bars`;
+        ctx.font = `${12*dpr()}px sans-serif`; ctx.setLineDash([]); ctx.fillStyle='rgba(0,0,0,0.6)';
+        const w = ctx.measureText(box).width + 8*dpr(), h = 16*dpr();
+        ctx.fillRect(tx-w/2, ty-h-6*dpr(), w, h);
+        ctx.fillStyle='#fff'; ctx.fillText(box, tx-w/2+4*dpr(), ty-6*dpr());
+      }
+    }
+  });
+  ctx.restore();
+}
+
+function hitTest(x, y){
+  // 간단한 히트테스트
+  for (let i=drawings.length-1;i>=0;i--){
+    const d = drawings[i];
+    if (d.type==='hline' && d.pts[0]){
+      const yy = priceToY(candleSeries, d.pts[0].p); if(yy==null) continue;
+      if (Math.abs(yy - y) < 6*dpr()) return d.id;
+    } else if (d.type==='trend' && d.pts.length>=2){
+      const [a,b]=d.pts;
+      const x1=timeToX(mainChart,a.t), y1=priceToY(candleSeries,a.p), x2=timeToX(mainChart,b.t), y2=priceToY(candleSeries,b.p);
+      if([x1,y1,x2,y2].some(v=>v==null)) continue;
+      // 점-선 거리
+      const A = y2-y1, B=x1-x2, C=x2*y1-x1*y2;
+      const dist = Math.abs(A*x+B*y+C)/Math.hypot(A,B);
+      if (dist < 6*dpr()) return d.id;
+    } else if (d.type==='rect' && d.pts.length>=2){
+      const [a,b]=d.pts;
+      let x1=timeToX(mainChart,a.t), x2=timeToX(mainChart,b.t), y1=priceToY(candleSeries,a.p), y2=priceToY(candleSeries,b.p);
+      if([x1,y1,x2,y2].some(v=>v==null)) continue;
+      const left=Math.min(x1,x2), right=Math.max(x1,x2), top=Math.min(y1,y2), bottom=Math.max(y1,y2);
+      if (x>=left && x<=right && y>=top && y<=bottom) return d.id;
+    }
+  }
+  return null;
+}
+
+function genId(){ return Math.random().toString(36).slice(2,9); }
+
+/** ========= 마우스 상호작용 ========= */
+(function wireMouse(){
+  const cv = $('overlayMain');
+  let dragging = false; let dragOffset = null; let drawingDraft = null;
+
+  cv.addEventListener('mousedown', (e)=>{
+    const rect = cv.getBoundingClientRect(); const x=(e.clientX-rect.left)*dpr(), y=(e.clientY-rect.top)*dpr();
+    const t = xToTime(mainChart, (e.clientX-rect.left)), p = yToPrice(candleSeries, (e.clientY-rect.top));
+    if (t==null || p==null) return;
+
+    if (tool==='cursor'){
+      const id = hitTest(x,y);
+      selectedId = id; drawDrawings();
+      if (id){
+        // 드래그 시작
+        dragging = true;
+        dragOffset = { x, y, id };
+      }
+      return;
+    }
+
+    pushHistory();
+    if (tool==='hline'){
+      const {t:tt, p:pp} = nearestOHLC(Math.round(t), p);
+      drawingDraft = { id:genId(), type:'hline', pts:[{t:tt, p:pp}] };
+      drawings.push(drawingDraft); selectedId=drawingDraft.id; drawDrawings(); saveLayout();
+    } else if (tool==='trend' || tool==='rect' || tool==='ruler'){
+      const {t:tt, p:pp} = nearestOHLC(Math.round(t), p);
+      drawingDraft = { id:genId(), type:tool, pts:[{t:tt, p:pp}] };
+      drawings.push(drawingDraft); selectedId=drawingDraft.id; drawDrawings(); saveLayout();
+    }
+  });
+
+  cv.addEventListener('mousemove', (e)=>{
+    const rect = cv.getBoundingClientRect(); const x=(e.clientX-rect.left)*dpr(), y=(e.clientY-rect.top)*dpr();
+    const t = xToTime(mainChart, (e.clientX-rect.left)), p = yToPrice(candleSeries, (e.clientY-rect.top));
+    if (t==null || p==null) return;
+
+    if (dragging && dragOffset){
+      // 간단 이동: 선택된 도형 전체를 Δ로 이동
+      const sel = drawings.find(d=>d.id===dragOffset.id); if (!sel) return;
+      const dx = x - dragOffset.x; const dy = y - dragOffset.y;
+      dragOffset.x = x; dragOffset.y = y;
+      // 좌표를 price/time로 역변환하기 까다로우므로, 현재 Δ를 t/p 스텝으로 근사
+      sel.pts = sel.pts.map(pt=>{
+        const px = timeToX(mainChart, pt.t) + dx, py = priceToY(candleSeries, pt.p) + dy;
+        const nt = xToTime(mainChart, px/dpr()); const np = yToPrice(candleSeries, py/dpr());
+        return { t: Math.round(nt||pt.t), p: np??pt.p };
+      });
+      drawDrawings(); saveLayout(); return;
+    }
+
+    if (drawingDraft){
+      const {t:tt, p:pp} = nearestOHLC(Math.round(t), p);
+      if (drawingDraft.pts.length===1) drawingDraft.pts.push({t:tt,p:pp});
+      else drawingDraft.pts[drawingDraft.pts.length-1] = {t:tt,p:pp};
+      drawDrawings();
+    }
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    dragging=false; dragOffset=null;
+    drawingDraft=null; saveLayout();
+  });
+
+  // 단축키
+  window.addEventListener('keydown', (e)=>{
+    if (e.key==='Delete' && selectedId){
+      pushHistory();
+      drawings = drawings.filter(d=>d.id!==selectedId);
+      selectedId=null; drawDrawings(); saveLayout();
+    }
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+    if (e.key==='1') setTool('cursor');
+    if (e.key==='2') setTool('trend');
+    if (e.key==='3') setTool('hline');
+    if (e.key==='4') setTool('rect');
+    if (e.key.toLowerCase()==='r') setTool('ruler');
+  });
+})();
+
+/** ========= 로딩/표시 ========= */
+async function refreshZones({ forceServer=false }={}){
+  const symbol = $('symbol').value.trim().toUpperCase();
+  const interval = $('interval').value;
+
+  if (!$('showOB').checked) { zones=[]; drawZones(); return; }
+
+  let srvZones=[];
+  if (forceServer){
+    try{
+      const z = await fetch(api(`/api/zones/ob?symbol=${symbol}&interval=${interval}&lookback=500&extend=150&debug=true`)).then(r=>r.json());
+      srvZones = Array.isArray(z.zones)? z.zones : [];
+    }catch(e){}
+  }
+  zones = srvZones;
+
+  if (!zones.length && lastKs.length){
+    // fallback: 간단 로컬 OB (조건 동일)
+    const out=[]; const start=Math.max(1, lastKs.length-800);
+    for (let i=start; i<lastKs.length-1; i++){
+      const b=lastKs[i], fut=lastKs.slice(i+1, Math.min(i+151,lastKs.length)); if(!fut.length) continue;
+      const top=Math.max(b.o,b.c,b.h), bottom=Math.min(b.o,b.c,b.l);
+      if (b.c<b.o && fut.some(x=>x.h>=b.h)) out.push({type:'bullish', start:b.t, end:lastKs.at(-1).t, top, bottom});
+      if (b.c>b.o && fut.some(x=>x.l<=b.l)) out.push({type:'bearish', start:b.t, end:lastKs.at(-1).t, top, bottom});
+    }
+    zones = out.slice(-20);
+  }
+  drawZones();
+}
+
+async function loadAll(){
+  const symbol = $('symbol').value.trim().toUpperCase();
+  const interval = $('interval').value;
+
+  lastKs = await fetch(api(`/api/klines?symbol=${symbol}&interval=${interval}&limit=500`)).then(r=>r.json());
+  const candles = lastKs.map(k=>({ time:k.t, open:k.o, high:k.h, low:k.l, close:k.c }));
+  candleSeries.setData(candles);
+  mainChart.timeScale().fitContent();
+
+  vwapArr = calcVWAP(lastKs);
+  const closes = lastKs.map(k=>k.c);
+  temaArr = calcTEMA(closes, 30);
+  rsiArr  = calcRSI(closes, 14);
+
+  vwapSeries.setData(lastKs.map((k,i)=>({ time:k.t, value:vwapArr[i] })));
+  temaSeries.setData(lastKs.map((k,i)=>({ time:k.t, value:temaArr[i] })));
+  volSeries.setData(lastKs.map(k=>({ time:k.t, value:k.v })));
+  rsiSeries.setData(lastKs.map((k,i)=>({ time:k.t, value:rsiArr[i] ?? null })));
+
+  vwapSeries.applyOptions({ visible: $('showVWAP').checked });
+  temaSeries.applyOptions({ visible: $('showTEMA').checked });
+  volSeries.applyOptions({ visible: $('showVOL').checked });
+  rsiSeries.applyOptions({ visible: $('showRSI').checked });
+
+  await refreshZones({ forceServer:true });
+
+  // 기존 시그널 마커
+  const sigs = await fetch(api(`/api/signals?symbol=${symbol}&interval=${interval}&limit=200`)).then(r=>r.json()).catch(()=>[]);
+  const markers = (sigs || []).map(s=>({ time: s.ts, position: s.side==='LONG' ? 'belowBar' : 'aboveBar', color: s.side==='LONG' ? getComputedStyle(document.body).getPropertyValue('--buy').trim() : getComputedStyle(document.body).getPropertyValue('--sell').trim(), shape: s.side==='LONG' ? 'arrowUp' : 'arrowDown', text: s.side }));
+  candleSeries.setMarkers(markers);
+
+  await refreshHUD();
+  drawDrawings();
+  saveLayout();
+}
+
+async function refreshHUD(){
+  const symbol = $('symbol').value.trim().toUpperCase();
+  const interval = $('interval').value;
+  const h = await fetch(api(`/api/hud?symbol=${symbol}&interval=${interval}&limit=500`)).then(r=>r.json()).catch(()=>null);
+  if(!h) return;
+  $("hud_price").textContent = fmt(h.last_price);
+  $("hud_vwap").textContent  = fmt(h.vwap);
+  $("hud_tema").textContent  = fmt(h.tema30);
+  $("hud_atr").textContent   = fmt(h.atr14);
+  $("hud_atrp").textContent  = h.atrp ? fmt(h.atrp*100,2)+'%' : '-';
+  $("hud_trend").textContent = h.trend==='up' ? '상승' : '하락';
+}
+
+async function runStrategy(){
+  const symbol = $('symbol').value.trim().toUpperCase();
+  const interval = $('interval').value;
+  await fetch(api(`/api/strategy/run?symbol=${symbol}&interval=${interval}&limit=500&tema_len=30&atr_len=14&vwap_filter=true&atr_distance_mult=0.0&cooldown_bars=5`), { method:'POST' });
+  const sigs = await fetch(api(`/api/signals?symbol=${symbol}&interval=${interval}&limit=200`)).then(r=>r.json()).catch(()=>[]);
+  const markers = (sigs || []).map(s=>({ time: s.ts, position: s.side==='LONG' ? 'belowBar' : 'aboveBar', color: s.side==='LONG' ? getComputedStyle(document.body).getPropertyValue('--buy').trim() : getComputedStyle(document.body).getPropertyValue('--sell').trim(), shape: s.side==='LONG' ? 'arrowUp' : 'arrowDown', text: s.side }));
+  candleSeries.setMarkers(markers);
+}
+
+/** ========= 비교 심볼 ========= */
+async function addCompare(){
+  const sym = $('cmpSymbol').value.trim().toUpperCase(); if(!sym) return;
+  const interval = $('interval').value;
+  const ks = await fetch(api(`/api/klines?symbol=${sym}&interval=${interval}&limit=500`)).then(r=>r.json());
+  if(!ks?.length) return;
+  const base = ks[0].c || 1;
+  cmpData = ks.map(k=>({ time:k.t, value: (k.c/base)*100 }));
+  cmpSeries.setData(cmpData);
+  cmpSeries.applyOptions({ visible:true });
+}
+
+/** ========= 리플레이 ========= */
+let replayTimer = null;
+function applyReplay(){
+  const total = lastKs.length;
+  const bars = Number($('rangeBars').value);
+  const start = Number($('rangeStart').value);
+  const from = Math.max(0, start);
+  const to   = Math.min(total-1, from + bars);
+  mainChart.timeScale().setVisibleLogicalRange({ from, to });
+}
+function playReplay(){
+  if (playing){ clearInterval(replayTimer); playing=false; $('playBtn').textContent='▶ 재생'; return; }
+  playing=true; $('playBtn').textContent='⏸ 정지';
+  replayTimer = setInterval(()=>{
+    const s = Number($('rangeStart').value);
+    $('rangeStart').value = Math.min(Number($('rangeStart').max), s+1);
+    applyReplay();
+  }, 500);
+}
+
+/** ========= 내보내기 ========= */
+function exportCSV(){
+  if (!lastKs.length) return;
+  const rows = ['time,open,high,low,close,volume,vwap,tema30,rsi14'];
+  for (let i=0;i<lastKs.length;i++){
+    const k=lastKs[i];
+    rows.push([k.t,k.o,k.h,k.l,k.c,k.v, vwapArr[i]??'', temaArr[i]??'', rsiArr[i]??''].join(','));
+  }
+  download(`chart_${$('symbol').value}_${$('interval').value}.csv`, rows.join('\n'));
+}
+
+// 베타: 메인 price canvas + overlay만 합성
+function exportPNG(){
+  const chartCanvas = document.querySelector('#chartMain canvas');
+  const overlay = $('overlayMain');
+  if (!chartCanvas) return;
+  const w = chartCanvas.width, h = chartCanvas.height;
+  const out = document.createElement('canvas'); out.width=w; out.height=h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(chartCanvas, 0, 0);
+  ctx.drawImage(overlay, 0, 0);
+  const url = out.toDataURL('image/png'); const a=document.createElement('a'); a.href=url; a.download=`chart_${$('symbol').value}.png`; a.click();
+}
+
+/** ========= 이벤트 바인딩 ========= */
+window.addEventListener('DOMContentLoaded', async ()=>{
+  buildCharts();
+  loadLayout(); // (도형/옵션) 복원
+
+  // 툴바
+  document.querySelectorAll('.toolbtn[data-tool]').forEach(btn=>{
+    btn.addEventListener('click', ()=> setTool(btn.dataset.tool));
+  });
+  $('magnetBtn').addEventListener('click', ()=>{ magnetOn=!magnetOn; $('magnetBtn').textContent = magnetOn? '자석 ON' : '자석 OFF'; saveLayout(); });
+  $('delBtn').addEventListener('click', ()=>{ if(!selectedId) return; history.push(JSON.stringify(drawings)); drawings = drawings.filter(d=>d.id!==selectedId); selectedId=null; drawDrawings(); saveLayout(); });
+  $('undoBtn').addEventListener('click', undo);
+  $('redoBtn').addEventListener('click', redo);
+  $('autoBtn').addEventListener('click', ()=> mainChart.timeScale().fitContent());
+  $('logBtn').addEventListener('click', ()=>{
+    const ps = candleSeries.priceScale(); const mode = ps.options().mode;
+    const next = mode===LightweightCharts.PriceScaleMode.Logarithmic ? LightweightCharts.PriceScaleMode.Normal : LightweightCharts.PriceScaleMode.Logarithmic;
+    candleSeries.applyOptions({ priceScale: { mode: next } });
+    $('logBtn').textContent = next===LightweightCharts.PriceScaleMode.Logarithmic ? '로그 ON' : '로그 OFF';
+  });
+  $('themeBtn').addEventListener('click', ()=>{
+    const cur = document.body.getAttribute('data-theme')==='light' ? 'dark' : 'light';
+    document.body.setAttribute('data-theme', cur);
+    // 테마 변경 반영 위해 차트 재생성
+    mainChart.remove(); subChart.remove();
+    buildCharts(); loadAll(); drawDrawings(); saveLayout();
+  });
+  $('fullBtn').addEventListener('click', ()=>{ if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+  $('csvBtn').addEventListener('click', exportCSV);
+  $('pngBtn').addEventListener('click', exportPNG);
+
+  // 표시 토글
+  $('showVWAP').addEventListener('change', e=> vwapSeries.applyOptions({ visible: e.target.checked }));
+  $('showTEMA').addEventListener('change', e=> temaSeries.applyOptions({ visible: e.target.checked }));
+  $('showOB').addEventListener('change', async (e)=>{ if (e.target.checked) await refreshZones({ forceServer:true }); else { zones=[]; drawZones(); }});
+  $('showVOL').addEventListener('change', e=> volSeries.applyOptions({ visible: e.target.checked }));
+  $('showRSI').addEventListener('change', e=> rsiSeries.applyOptions({ visible: e.target.checked }));
+
+  // 심볼 로딩/전략
+  $('loadBtn').addEventListener('click', loadAll);
+  $('runStratBtn').addEventListener('click', runStrategy);
+
+  // 비교
+  $('cmpBtn').addEventListener('click', addCompare);
+
+  // 리플레이
+  $('rangeBars').addEventListener('input', applyReplay);
+  $('rangeStart').addEventListener('input', applyReplay);
+  $('playBtn').addEventListener('click', playReplay);
+
+  // 실시간 HUD
+  setInterval(()=>{ $('nowKST').textContent = nowKST(); }, 1000);
+  setInterval(refreshHUD, 5000);
+
+  await loadAll(); // 최초 로딩
+});
+</script>
+</body>
+</html>
