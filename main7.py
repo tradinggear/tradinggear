@@ -249,7 +249,7 @@ def tv_webhook(inp: WebhookIn):
 
 @app.get("/")
 def index(request: Request):
-    return templates.TemplateResponse("index6.html", {"request": request})
+    return templates.TemplateResponse("index7.html", {"request": request})
 
 # ----- [APPEND-ONLY] Superchart helpers ----- #
 from fastapi import Query
@@ -373,7 +373,7 @@ def _binance_24h(symbol: str):
         return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
     except Exception as e:
         return {"symbol": symbol.upper(), "error": f"binance {e}"}
-
+"""
 @app.get("/api/quotes/yf")
 def api_quotes_yf(symbols: str = Query(..., description="Comma-separated symbols e.g. VIX,AAPL,EURUSD")):
     try:
@@ -401,7 +401,7 @@ def api_quotes_yf(symbols: str = Query(..., description="Comma-separated symbols
         return {"quotes": out}
     except Exception as e:
         return {"quotes": [{"symbol": s, "error": str(e)} for s in symbols.split(",")]}
-"""
+
 @app.get("/api/quotes/any")
 def api_quotes_any(symbols: str = Query(..., description="Comma-separated symbols, mixes Binance & YF")):
     """
