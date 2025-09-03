@@ -4,40 +4,7 @@
 <meta charset="utf-8" />
 <title>TradingGear — SuperChart-like</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" crossorigin="anonymous">
-
-// === KST display helpers (no coordinate changes) ===
-function kstFromSec(sec){
-  var ms = (sec > 1e12) ? sec : (sec * 1000); // accept sec or ms
-  return new Date(ms + 9 * 3600 * 1000);
-}
-function kstLabelFromSec(sec){
-  var d = kstFromSec(sec);
-  var MM = String(d.getMonth()+1).padStart(2,'0');
-  var DD = String(d.getDate()).padStart(2,'0');
-  var hh = String(d.getHours()).padStart(2,'0');
-  var mm = String(d.getMinutes()).padStart(2,'0');
-  var ss = String(d.getSeconds()).padStart(2,'0');
-  return MM + '-' + DD + ' ' + hh + ':' + mm + ':' + ss;
-}
-function kstTickLabel(time){
-  var s;
-  if (typeof time === 'number') { s = time; }
-  else if (time && typeof time === 'object') {
-    if ('seconds' in time) { s = time.seconds; }
-    else if ('year' in time && 'month' in time && 'day' in time) {
-      s = Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000);
-    }
-  }
-  if (typeof s !== 'number') return '';
-  var d = kstFromSec(s);
-  var MM = String(d.getMonth()+1).padStart(2,'0');
-  var DD = String(d.getDate()).padStart(2,'0');
-  var hh = String(d.getHours()).padStart(2,'0');
-  var mm = String(d.getMinutes()).padStart(2,'0');
-  return MM + '-' + DD + ' ' + hh + ':' + mm;
-}
-</script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" crossorigin="anonymous"></script>
 <style>
   /* Dark */
   :root {
@@ -260,7 +227,7 @@ function buildCharts(){
     if(!p?.time){ $("hud_data").textContent='-'; return; }
     const idx=lastKs.findIndex(x=>x.t===p.time); if(idx<0) return;
     const k=lastKs[idx];
-    $("hud_data").textContent=`t(KST):${kstLabelFromSec(k.t)} O:${fmt(k.o)} H:${fmt(k.h)} L:${fmt(k.l)} C:${fmt(k.c)}`;
+    $("hud_data").textContent=`t:${k.t} O:${fmt(k.o)} H:${fmt(k.h)} L:${fmt(k.l)} C:${fmt(k.c)}`;
     $("hud_vol").textContent=fmt(k.v,0);
     $("hud_rsi").textContent=fmt(rsiArr[idx]??NaN,2);
     $("hud_cvd").textContent=fmt(cvdArr[idx]??NaN,0);
@@ -594,12 +561,6 @@ function exportPNG(){
 
 /* ===== Theme ===== */
 function applyTheme(){
-  // keep KST labels on theme change
-  if (typeof kstTickLabel === 'function') {
-    if (mainChart) mainChart.applyOptions({ timeScale:{ tickMarkFormatter: kstTickLabel }, localization:{ locale: 'ko-KR' } });
-    if (subChart)  subChart.applyOptions({  timeScale:{ tickMarkFormatter: kstTickLabel }, localization:{ locale: 'ko-KR' } });
-  }
-
   const optsBase = { layout:{ background:{type:'solid', color:css('--bg')}, textColor:css('--text') },
                      grid:{ vertLines:{ color:css('--line') }, horzLines:{ color:css('--line') } },
                      timeScale:{ borderColor:css('--line') }, rightPriceScale:{ borderColor:css('--line') } };
@@ -660,8 +621,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     const sigs=await fetch(api(`/api/signals?symbol=${symbol}&interval=${interval}&limit=200`)).then(r=>r.json()).catch(()=>[]);
     const markers=(sigs||[]).map(s=>({ time:s.ts, position:s.side==='LONG'?'belowBar':'aboveBar', color:s.side==='LONG'?css('--buy'):css('--sell'), shape:s.side==='LONG'?'arrowUp':'arrowDown', text:s.side }));
     candleSeries.setMarkers(markers);
-  
-    try{ mainChart.timeScale().scrollToRealTime(); }catch(e){}});
+  });
 
   $('cmpBtn').addEventListener('click', addCompare);
   $('rangeBars').addEventListener('input', applyReplay);

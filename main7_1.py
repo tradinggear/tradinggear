@@ -5,11 +5,9 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.orm import sessionmaker, declarative_base
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Literal
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 import requests, time, os
-
-KST = timezone(timedelta(hours=9))  # UTC+9
 
 # 맨 위 import 근처에 추가
 from typing import Optional, Dict, Any
@@ -23,7 +21,7 @@ def _cache_put(sym: str, last: float, chg: Optional[float]):
         "symbol": sym.upper(),
         "last": float(last),
         "chg": (None if chg is None else float(chg)),
-        "ts": int(time.time()) + 9*3600,
+        "ts": int(time.time()),
     }
 def _cache_get(sym: str):
     return Q_CACHE.get(sym.upper())
@@ -54,7 +52,7 @@ engine = create_engine(DB_URL, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="TradingGear — SuperChart-like (KST)")
+app = FastAPI(title="TradingGear — SuperChart-like")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
@@ -73,7 +71,7 @@ def fetch_klines(symbol: str, interval: str, limit: int = 500):
                 {"symbol": symbol.upper(), "interval": interval, "limit": min(limit, 1500)})
     out = []
     for x in data:
-        out.append({"t": (int(x[0]) // 1000) + 9*3600, "o": float(x[1]), "h": float(x[2]),
+        out.append({"t": int(x[0]) // 1000, "o": float(x[1]), "h": float(x[2]),
                     "l": float(x[3]), "c": float(x[4]), "v": float(x[5])})
     return out
 
@@ -182,7 +180,7 @@ class WebhookIn(BaseModel):
     secret: Optional[str]=None
 
 @app.get("/health")
-def health(): return {"ok":True, "ts": int(time.time()) + 9*3600}
+def health(): return {"ok":True, "ts": int(time.time())}
 
 @app.get("/api/klines")
 def api_klines(symbol: str = Query(...), interval: str = Query("1m"), limit: int = Query(500)):
@@ -222,7 +220,7 @@ def api_strategy_run(symbol: str = Query(...), interval: str = Query("1m"),
     written=0
     with SessionLocal() as db:
         for s in sigs:
-            ts_dt=datetime.fromtimestamp(s["ts"], tz=timezone.utc).astimezone(KST)
+            ts_dt=datetime.fromtimestamp(s["ts"], tz=timezone.utc)
             exists=db.execute(select(Signal).where(Signal.symbol==symbol.upper(),Signal.interval==interval,Signal.ts==ts_dt,Signal.side==s["side"]).limit(1)).scalar_one_or_none()
             if exists: continue
             db.add(Signal(symbol=symbol.upper(), interval=interval, side=s["side"], reason=s["reason"], price=float(s["price"]), ts=ts_dt)); written+=1
@@ -241,7 +239,7 @@ def api_signals(symbol: Optional[str]=Query(None), interval: Optional[str]=Query
 @app.post("/tv/webhook")
 def tv_webhook(inp: WebhookIn):
     if WEBHOOK_SECRET and inp.secret != WEBHOOK_SECRET: raise HTTPException(401,"invalid secret")
-    ts=inp.ts or int(time.time()) + 9*3600; ts_dt=datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(KST)
+    ts=inp.ts or int(time.time()); ts_dt=datetime.fromtimestamp(ts, tz=timezone.utc)
     with SessionLocal() as db:
         exists=db.execute(select(Signal).where(Signal.symbol==inp.symbol.upper(),Signal.interval==inp.interval,Signal.ts==ts_dt,Signal.side==inp.side).limit(1)).scalar_one_or_none()
         if not exists:
@@ -251,7 +249,7 @@ def tv_webhook(inp: WebhookIn):
 
 @app.get("/")
 def index(request: Request):
-    return templates.TemplateResponse("index8.html", {"request": request})
+    return templates.TemplateResponse("index7.html", {"request": request})
 
 # ----- [APPEND-ONLY] Superchart helpers ----- #
 from fastapi import Query
@@ -321,7 +319,7 @@ def api_quotes_yf(symbols: str = Query(..., description="Comma-separated friendl
         # index by Yahoo symbol
         by_y = { (row.get("symbol") or "").upper(): row for row in data }
         out = []
-        now_ts = int(_time.time()) + 9*3600
+        now_ts = int(_time.time())
         for friendly, y in zip(syms, yf_syms):
             row = by_y.get(y.upper())
             if not row:
@@ -372,7 +370,7 @@ def _binance_24h(symbol: str):
         j = r.json()
         last = float(j.get("lastPrice")) if j.get("lastPrice") is not None else None
         chg  = float(j.get("priceChangePercent")) if j.get("priceChangePercent") is not None else None
-        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
+        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
     except Exception as e:
         return {"symbol": symbol.upper(), "error": f"binance {e}"}
 """
@@ -388,7 +386,7 @@ def api_quotes_yf(symbols: str = Query(..., description="Comma-separated symbols
         data = r.json().get("quoteResponse", {}).get("result", [])
         by_y = { (row.get("symbol") or "").upper(): row for row in data }
         out = []
-        now_ts = int(_time.time()) + 9*3600
+        now_ts = int(_time.time())
         for friendly, y in zip(syms, yf_syms):
             row = by_y.get((y or "").upper())
             if not row:
@@ -475,7 +473,7 @@ def _binance_24h(symbol: str):
             j = r.json()
             last = float(j["lastPrice"])
             chg  = float(j["priceChangePercent"])
-            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
+            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
         # 선물에 없으면 Spot으로 폴백
         spot_url = "https://api.binance.com/api/v3/ticker/24hr"
         rs = requests.get(spot_url, params={"symbol": symbol.upper()}, timeout=REQUEST_TIMEOUT)
@@ -483,7 +481,7 @@ def _binance_24h(symbol: str):
             j = rs.json()
             last = float(j["lastPrice"])
             chg  = float(j["priceChangePercent"])
-            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
+            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
         return {"symbol": symbol.upper(), "error": f"binance HTTP {r.status_code}/{rs.status_code}"}
     except Exception as e:
         return {"symbol": symbol.upper(), "error": f"binance {e}"}
@@ -509,12 +507,12 @@ def _yf_fetch(friendly_syms):
         )
         if r.status_code != 200:
             # 전체 실패는 각 심볼에 상태를 심어서 반환
-            now = int(_time.time()) + 9*3600
+            now = int(_time.time())
             return [{"symbol": s, "error": f"YF HTTP {r.status_code}", "ts": now} for s in friendly_syms]
 
         data = r.json().get("quoteResponse", {}).get("result", [])
         by_y = { (row.get("symbol") or "").upper(): row for row in data }
-        now = int(_time.time()) + 9*3600
+        now = int(_time.time())
         out = []
         for friendly, y in zip(friendly_syms, mapped):
             row = by_y.get((y or "").upper())
@@ -534,7 +532,7 @@ def _yf_fetch(friendly_syms):
                 })
         return out
     except Exception as e:
-        now = int(_time.time()) + 9*3600
+        now = int(_time.time())
         return [{"symbol": s, "error": f"YF {e}", "ts": now} for s in friendly_syms]
 
 @app.get("/api/quotes/any2")
@@ -579,12 +577,12 @@ def _yf_headers():
     return {"User-Agent": "Mozilla/5.0"}
 
 def _yf_cache_put(sym: str, last: float, chg: Optional[float]):
-    _YF_CACHE[sym] = {"ts": int(_time.time()) + 9*3600, "last": last, "chg": chg}
+    _YF_CACHE[sym] = {"ts": int(_time.time()), "last": last, "chg": chg}
 
 def _yf_cache_get(sym: str):
     v = _YF_CACHE.get(sym)
     if not v: return None
-    if int(_time.time()) + 9*3600 - v["ts"] > YF_TTL_SEC:
+    if int(_time.time()) - v["ts"] > YF_TTL_SEC:
         return None
     return v
 
@@ -610,7 +608,7 @@ def _yf_fetch_batch(y_syms: list[str]) -> dict:
             if r.status_code == 200:
                 data = r.json().get("quoteResponse", {}).get("result", [])
                 by_y = { (row.get("symbol") or "").upper(): row for row in data }
-                now_ts = int(_time.time()) + 9*3600
+                now_ts = int(_time.time())
                 for friendly, y in zip(y_syms, y_syms):
                     row = by_y.get((y or "").upper())
                     if not row:
@@ -644,7 +642,7 @@ def _yf_fetch_batch(y_syms: list[str]) -> dict:
                 retry += 1
                 continue
             else:
-                now_ts = int(_time.time()) + 9*3600
+                now_ts = int(_time.time())
                 for friendly in y_syms:
                     c = _yf_cache_get(friendly)
                     if c:
@@ -653,7 +651,7 @@ def _yf_fetch_batch(y_syms: list[str]) -> dict:
                         out[friendly] = {"error": f"YF HTTP {r.status_code}"}
                 return out
         except Exception as e:
-            now_ts = int(_time.time()) + 9*3600
+            now_ts = int(_time.time())
             for friendly in y_syms:
                 c = _yf_cache_get(friendly)
                 if c:
@@ -697,7 +695,7 @@ def _binance_24h(symbol: str):
         j = r.json()
         last = float(j.get("lastPrice")) if j.get("lastPrice") is not None else None
         chg  = float(j.get("priceChangePercent")) if j.get("priceChangePercent") is not None else None
-        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
+        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
     except Exception as e:
         return {"symbol": symbol.upper(), "error": f"binance {e}"}
 
@@ -714,7 +712,7 @@ def api_quotes_all(symbols: str = _Q(..., description="Comma-separated symbols e
     if yf_syms:
         y_syms = _yf_map_list(yf_syms)
         results = _yf_fetch_batch(y_syms)   # 429-safe
-        now_ts = int(_time.time()) + 9*3600
+        now_ts = int(_time.time())
         for friendly, y in zip(yf_syms, y_syms):
             row = results.get(friendly) or results.get(y) or {}
             if "last" in row:
