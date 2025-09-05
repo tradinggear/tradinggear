@@ -1,10 +1,10 @@
 import type { MetaFunction } from "@remix-run/node";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useNavigate } from "react-router-dom";
 import { useThemeStore } from "@/stores/themeStore";
-import MainEventPopup from "@/components/popup1";
+// import MainEventPopup from "@/components/popup1";
 
 export const meta: MetaFunction = () => {
   return [
@@ -16,6 +16,10 @@ export const meta: MetaFunction = () => {
 export default function Index() {
   const navigate = useNavigate();
   const { theme, isClient, initializeTheme } = useThemeStore();
+
+  const [modalImg, setModalImg] = useState<string | null>(null);
+
+  const images = ["/chart.png"]; // 필요 시 이미지 배열 추가
 
   useEffect(() => {
     initializeTheme();
@@ -41,7 +45,7 @@ export default function Index() {
 
   const textPrimary = theme === "dark" ? "text-white" : "text-slate-900";
   const textSecondary = theme === "dark" ? "text-slate-300" : "text-slate-600";
-  const primaryColor = theme === "dark" ? "text-cyan-400" : "text-blue-600";
+  // const primaryColor = theme === "dark" ? "text-cyan-400" : "text-blue-600";
   const accentColor =
     theme === "dark" ? "text-emerald-400" : "text-emerald-600";
 
@@ -51,7 +55,6 @@ export default function Index() {
       {/* Floating particles */}
       {isClient &&
         Array.from({ length: 5 }, (_, i) => <Particle key={i} index={i} />)}
-
       {/* Header Component */}
       <Header />
 
@@ -163,36 +166,44 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       <section
         className={`py-20 ${
           theme === "dark"
-            ? "bg-gradient-to-b from-transparent to-slate-800/30"
-            : "bg-gradient-to-b from-transparent to-slate-100/40"
+            ? "bg-gradient-to-b from-slate-900/20 via-transparent to-slate-800/30"
+            : "bg-gradient-to-b from-slate-200/20 via-transparent to-slate-100/40"
         }`}
         id="preview"
       >
         <div className="max-w-6xl mx-auto px-4 lg:px-8 text-center">
-          {/* 상단 제목/설명 */}
-          <h2 className={`text-3xl lg:text-5xl font-bold mb-6 ${textPrimary}`}>
-            실시간 트레이딩 차트 미리보기
+          <h2
+            className={`text-4xl lg:text-6xl font-bold mb-4 bg-clip-text text-transparent ${
+              theme === "dark"
+                ? "bg-gradient-to-r from-white to-cyan-400"
+                : "bg-gradient-to-r from-slate-900 to-blue-600"
+            }`}
+          >
+            ⚡ 종합 실시간 트레이딩 차트
           </h2>
-          <p className={`mb-12 text-lg ${textSecondary} mx-auto max-w-2xl`}>
+          <p
+            className={`mt-10 mb-12 text-lg ${textSecondary} mx-auto max-w-2xl`}
+          >
             거래 데이터를 기반으로 초단위로 갱신되는 <br />
             주식 실시간 트레이딩 차트를 직접 경험해보세요.
           </p>
 
-          {/* 이미지 단독 영역 */}
           <div className="relative max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl border border-slate-200/20 mb-28">
-            <img
-              src="/chart.png"
-              alt="실시간 트레이딩 차트 미리보기"
-              className="w-full h-auto"
+            <video
+              src="/chart_video.mp4"
+              controls
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-auto rounded-2xl"
             />
           </div>
 
-          {/* 텍스트 + 이미지 영역 */}
-          <div className="flex flex-col lg:flex-row items-center gap-12 ">
+          <div className="flex flex-col lg:flex-row items-center gap-12">
             {/* 왼쪽 텍스트 */}
             <div className="lg:w-1/2 text-center lg:text-left">
               <h3
@@ -208,6 +219,7 @@ export default function Index() {
                 포트폴리오 관리부터 전략 시뮬레이션까지, 모든 기능이 직관적인
                 UI로 제공됩니다.
               </p>
+
               <div className="flex flex-col sm:flex-row gap-4 mt-6 justify-center lg:justify-start">
                 <button
                   className={`${
@@ -215,35 +227,53 @@ export default function Index() {
                       ? "bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-900 hover:shadow-cyan-400/40"
                       : "bg-gradient-to-r from-blue-600 to-emerald-600 text-white hover:shadow-blue-600/40"
                   } px-8 py-4 rounded-full font-bold text-lg hover:-translate-y-1 hover:shadow-xl transition-all duration-300`}
-                  onClick={() => navigate("/login")}
                 >
-                  API 연동 가이드 보기
+                  API 연동 가이드
                 </button>
                 <button
-                  className={`border-2 ${
+                  className={`border-2 px-8 py-4 rounded-full font-bold text-lg transition-all duration-300 ${
                     theme === "dark"
-                      ? "border-cyan-400 text-cyan-400 hover:bg-cyan-400"
-                      : "border-blue-600 text-blue-600 hover:bg-blue-600"
-                  } px-8 py-4 rounded-full font-bold text-lg transition-all duration-300`}
-                  onClick={() => navigate("/login")}
+                      ? "border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-slate-900"
+                      : "border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+                  }`}
+                  onClick={() => navigate("/feature")}
                 >
-                  차트 기능 자세히 보기
+                  차트 기능 자세히
                 </button>
               </div>
             </div>
 
             {/* 오른쪽 이미지 */}
             <div className="lg:w-1/2 relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200/20">
-              <img
-                src="/chart.png"
-                alt="실시간 트레이딩 차트 미리보기"
-                className="w-full h-auto"
-              />
+              <button
+                className="p-0 border-none bg-transparent cursor-zoom-in"
+                onClick={() => setModalImg(images[0])}
+              >
+                <img
+                  src={images[0]}
+                  alt="실시간 트레이딩 차트 미리보기"
+                  className="w-full h-auto rounded-xl"
+                />
+              </button>
             </div>
           </div>
         </div>
-      </section>
 
+        {/* 이미지 모달 */}
+        {modalImg && (
+          <button
+            className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4 cursor-zoom-out"
+            onClick={() => setModalImg(null)}
+            aria-label="이미지 닫기"
+          >
+            <img
+              src={modalImg}
+              alt="확대 이미지"
+              className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl"
+            />
+          </button>
+        )}
+      </section>
       {/* Features Section */}
       <section
         className={`py-20 ${
@@ -314,7 +344,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* Trading Bots Section */}
       <section className="py-20" id="bots">
         <div className="max-w-6xl mx-auto px-4 lg:px-8">
@@ -370,7 +399,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* CTA Section */}
       <section
         className={`py-20 text-center ${
@@ -411,7 +439,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* Footer Component */}
       <Footer onLinkClick={(linkName) => linkName} />
     </div>

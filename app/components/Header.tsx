@@ -73,18 +73,18 @@ export default function Header() {
             </li>
             <li>
               <a
-                href="/about"
+                href="/feature"
                 className={`${textPrimary} hover:${primaryColor.replace(
                   "text-",
                   "text-"
                 )} font-medium cursor-pointer transition-colors duration-300`}
               >
-                차트기능소개
+                기능소개
               </a>
             </li>
             <li>
               <a
-                href="/about"
+                href="/faq"
                 className={`${textPrimary} hover:${primaryColor.replace(
                   "text-",
                   "text-"
@@ -182,7 +182,7 @@ export default function Header() {
                 ? "bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-900 hover:shadow-cyan-400/30"
                 : "bg-gradient-to-r from-blue-600 to-emerald-600 text-white hover:shadow-blue-600/30"
             } px-6 py-3 rounded-full font-bold hover:transform hover:-translate-y-1 hover:shadow-lg transition-all duration-300`}
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/download")}
           >
             다운로드
           </button>
@@ -254,13 +254,13 @@ export default function Header() {
               </li>
               <li>
                 <a
-                  href="/blog"
+                  href="/doc"
                   className={`block ${textPrimary} hover:${primaryColor.replace(
                     "text-",
                     "text-"
                   )} font-medium cursor-pointer transition-colors duration-300 py-3 text-lg border-b border-gray-200/10`}
                 >
-                  블로그
+                  API 연동가이드
                 </a>
               </li>
               <li>
@@ -271,7 +271,18 @@ export default function Header() {
                     "text-"
                   )} font-medium cursor-pointer transition-colors duration-300 py-3 text-lg border-b border-gray-200/10`}
                 >
-                  문서
+                  기능소개
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/faq"
+                  className={`block ${textPrimary} hover:${primaryColor.replace(
+                    "text-",
+                    "text-"
+                  )} font-medium cursor-pointer transition-colors duration-300 py-3 text-lg border-b border-gray-200/10`}
+                >
+                  자주묻는질문(FAQ)
                 </a>
               </li>
               <li>
@@ -285,7 +296,7 @@ export default function Header() {
                   요금제
                 </a>
               </li>
-              <li>
+              {/* <li>
                 <a
                   href="/review"
                   className={`block ${textPrimary} hover:${primaryColor.replace(
@@ -295,7 +306,7 @@ export default function Header() {
                 >
                   리뷰
                 </a>
-              </li>
+              </li> */}
             </ul>
 
             {/* Mobile Menu Footer */}
@@ -320,9 +331,9 @@ export default function Header() {
                     ? "bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-900 hover:shadow-cyan-400/30"
                     : "bg-gradient-to-r from-blue-600 to-emerald-600 text-white hover:shadow-blue-600/30"
                 } px-6 py-4 rounded-full font-bold text-lg hover:transform hover:-translate-y-1 hover:shadow-lg transition-all duration-300`}
-                onClick={() => navigate("/login")}
+                onClick={() => navigate("/download")}
               >
-                무료 체험 시작
+                다운로드
               </button>
             </div>
           </div>
