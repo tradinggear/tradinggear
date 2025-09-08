@@ -93,28 +93,6 @@ export default function Header() {
                 자주묻는질문(FAQ)
               </a>
             </li>
-            {/* <li>
-              <a
-                href="/blog"
-                className={`${textPrimary} hover:${primaryColor.replace(
-                  "text-",
-                  "text-"
-                )} font-medium cursor-pointer transition-colors duration-300`}
-              >
-                블로그
-              </a>
-            </li>
-            <li>
-              <a
-                href="/doc"
-                className={`${textPrimary} hover:${primaryColor.replace(
-                  "text-",
-                  "text-"
-                )} font-medium cursor-pointer transition-colors duration-300`}
-              >
-                문서
-              </a>
-            </li> */}
             <li>
               <a
                 href="/pricing"
@@ -296,17 +274,6 @@ export default function Header() {
                   요금제
                 </a>
               </li>
-              {/* <li>
-                <a
-                  href="/review"
-                  className={`block ${textPrimary} hover:${primaryColor.replace(
-                    "text-",
-                    "text-"
-                  )} font-medium cursor-pointer transition-colors duration-300 py-3 text-lg border-b border-gray-200/10`}
-                >
-                  리뷰
-                </a>
-              </li> */}
             </ul>
 
             {/* Mobile Menu Footer */}

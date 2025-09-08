@@ -206,7 +206,7 @@ export default function FeaturesPage() {
         {/* 하단 패널 / CTA */}
         <section className="py-20 text-center">
           <h2 className={`text-3xl lg:text-5xl font-bold mb-12 ${textPrimary}`}>
-            하단 패널 & 사용자 설정
+            똑똑한 거래 관리
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto px-4 lg:px-8">
             {[

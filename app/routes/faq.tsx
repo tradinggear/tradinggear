@@ -4,7 +4,7 @@ import { useState } from "react";
 
 export default function FAQPage() {
   const [search, setSearch] = useState("");
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [openIndexes, setOpenIndexes] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState("all");
 
   const { theme } = useThemeStore();
@@ -93,6 +93,12 @@ export default function FAQPage() {
     { key: "license", label: "라이선스" },
   ];
 
+  const toggleIndex = (idx: number) => {
+    setOpenIndexes((prev) =>
+      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+    );
+  };
+
   return (
     <div className={`min-h-screen transition-all duration-300 ${themeClasses}`}>
       <Header />
@@ -125,7 +131,10 @@ export default function FAQPage() {
             {tabs.map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key);
+                  setOpenIndexes([]);
+                }}
                 className={`px-4 py-2 rounded-full font-semibold transition-colors border ${
                   activeTab === tab.key
                     ? theme === "dark"
@@ -176,7 +185,9 @@ export default function FAQPage() {
               filteredFaqs.map((faq, idx) => (
                 <button
                   key={idx}
-                  onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
+                  onClick={() => {
+                    toggleIndex(idx);
+                  }}
                   className={`w-full text-left rounded-2xl p-6 transition-all duration-300 ${
                     theme === "dark"
                       ? "bg-slate-800/80 border border-slate-700 hover:shadow-cyan-400/10"
@@ -187,9 +198,9 @@ export default function FAQPage() {
                     className={`text-lg font-semibold ${textPrimary} flex justify-between items-center`}
                   >
                     {faq.q}
-                    <span>{openIndex === idx ? "−" : "+"}</span>
+                    <span>{openIndexes.includes(idx) ? "−" : "+"}</span>
                   </h3>
-                  {openIndex === idx && (
+                  {openIndexes.includes(idx) && (
                     <p
                       className={`mt-3 text-base leading-relaxed ${textSecondary}`}
                     >
