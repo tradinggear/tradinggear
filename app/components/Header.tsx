@@ -154,16 +154,30 @@ export default function Header() {
           </div>
 
           {/* CTA Button - Desktop */}
-          <button
-            className={`hidden lg:block ${
-              theme === "dark"
-                ? "bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-900 hover:shadow-cyan-400/30"
-                : "bg-gradient-to-r from-blue-600 to-emerald-600 text-white hover:shadow-blue-600/30"
-            } px-6 py-3 rounded-full font-bold hover:transform hover:-translate-y-1 hover:shadow-lg transition-all duration-300`}
-            onClick={() => navigate("/download")}
-          >
-            다운로드
-          </button>
+          {/* CTA Buttons - Desktop */}
+          <div className="hidden lg:flex items-center space-x-4">
+            <button
+              className={`${
+                theme === "dark"
+                  ? "bg-slate-800 text-cyan-400 border border-cyan-400/20 hover:border-cyan-400"
+                  : "bg-white text-blue-600 border border-blue-600/20 hover:border-blue-600"
+              } px-6 py-3 rounded-full font-bold hover:transform hover:-translate-y-1 hover:shadow-md transition-all duration-300`}
+              onClick={() => navigate("/login")}
+            >
+              로그인
+            </button>
+
+            <button
+              className={`${
+                theme === "dark"
+                  ? "bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-900 hover:shadow-cyan-400/30"
+                  : "bg-gradient-to-r from-blue-600 to-emerald-600 text-white hover:shadow-blue-600/30"
+              } px-6 py-3 rounded-full font-bold hover:transform hover:-translate-y-1 hover:shadow-lg transition-all duration-300`}
+              onClick={() => navigate("/download")}
+            >
+              다운로드
+            </button>
+          </div>
         </nav>
 
         {/* Mobile Menu Overlay */}
@@ -243,7 +257,7 @@ export default function Header() {
               </li>
               <li>
                 <a
-                  href="/doc"
+                  href="/feature"
                   className={`block ${textPrimary} hover:${primaryColor.replace(
                     "text-",
                     "text-"

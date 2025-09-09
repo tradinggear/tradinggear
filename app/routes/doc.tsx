@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useThemeStore } from '../stores/themeStore';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { useState, useEffect } from "react";
+import { useThemeStore } from "../stores/themeStore";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import type { MetaFunction } from "@remix-run/node";
+
 export const meta: MetaFunction = () => {
   return [
     { title: "문서 - TRADING GEAR" },
@@ -12,8 +13,8 @@ export const meta: MetaFunction = () => {
 
 export default function DocsPage() {
   const { theme, initializeTheme } = useThemeStore();
-  const [activeSidebarItem, setActiveSidebarItem] = useState('getting-started');
-  const [isCodeCopied, setIsCodeCopied] = useState('');
+  const [activeSidebarItem, setActiveSidebarItem] = useState("api-guide");
+  const [isCodeCopied, setIsCodeCopied] = useState("");
 
   useEffect(() => {
     initializeTheme();
@@ -22,433 +23,397 @@ export default function DocsPage() {
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setIsCodeCopied(id);
-    setTimeout(() => setIsCodeCopied(''), 2000);
+    setTimeout(() => setIsCodeCopied(""), 2000);
   };
 
-  const themeClasses = theme === 'dark' 
-    ? 'bg-gradient-to-br from-slate-900 to-slate-800 text-white'
-    : 'bg-gradient-to-br from-white to-slate-50 text-slate-900';
+  const themeClasses =
+    theme === "dark"
+      ? "bg-gradient-to-br from-slate-900 to-slate-800 text-white"
+      : "bg-gradient-to-br from-white to-slate-50 text-slate-900";
 
-  const headerClasses = theme === 'dark'
-    ? 'bg-slate-900/95 border-cyan-400/20'
-    : 'bg-white/95 border-blue-600/20';
+  const textPrimary = theme === "dark" ? "text-white" : "text-slate-900";
+  const textSecondary = theme === "dark" ? "text-slate-300" : "text-slate-600";
+  const primaryColor = theme === "dark" ? "text-cyan-400" : "text-blue-600";
+  const accentColor =
+    theme === "dark" ? "text-emerald-400" : "text-emerald-600";
 
-  const textPrimary = theme === 'dark' ? 'text-white' : 'text-slate-900';
-  const textSecondary = theme === 'dark' ? 'text-slate-300' : 'text-slate-600';
-  const primaryColor = theme === 'dark' ? 'text-cyan-400' : 'text-blue-600';
-  const accentColor = theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600';
-
+  // Sidebar items (계층 구조)
   const sidebarItems = [
-    { id: 'getting-started', title: '빠른 시작', icon: '🚀' },
-    { id: 'authentication', title: '인증', icon: '🔐' },
-    { id: 'rest-api', title: 'REST API', icon: '📡' },
-    { id: 'websocket', title: 'WebSocket', icon: '⚡' },
-    { id: 'sdk-libraries', title: 'SDK & 라이브러리', icon: '📚' },
-    { id: 'tutorials', title: '튜토리얼', icon: '📖' },
-    { id: 'examples', title: '코드 예제', icon: '💻' },
-    { id: 'faq', title: 'FAQ', icon: '❓' },
-    { id: 'support', title: '지원', icon: '🆘' }
+    {
+      id: "api-guide",
+      title: "API 연동 가이드",
+      icon: "🔗",
+      children: [
+        { id: "binance", title: "바이낸스" },
+        { id: "upbit", title: "업비트" },
+        { id: "bithumb", title: "빗썸" },
+      ],
+    },
+    { id: "security", title: "보안 안내", icon: "🔒" },
+    { id: "examples", title: "응용 예시", icon: "💻" },
+    { id: "faq", title: "FAQ", icon: "❓" },
   ];
 
-  const CodeBlock = ({ children, language = 'javascript', id, title }) => (
-    <div className={`${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-100'} rounded-lg border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-300'} overflow-hidden my-4`}>
+  // 코드 블록 컴포넌트
+  const CodeBlock = ({ children, language = "javascript", id, title }) => (
+    <div
+      className={`${
+        theme === "dark" ? "bg-slate-800" : "bg-slate-100"
+      } rounded-lg border ${
+        theme === "dark" ? "border-slate-700" : "border-slate-300"
+      } overflow-hidden my-4`}
+    >
       {title && (
-        <div className={`px-4 py-2 ${theme === 'dark' ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700'} text-sm font-medium border-b ${theme === 'dark' ? 'border-slate-600' : 'border-slate-300'} flex justify-between items-center`}>
+        <div
+          className={`px-4 py-2 ${
+            theme === "dark"
+              ? "bg-slate-700 text-slate-300"
+              : "bg-slate-200 text-slate-700"
+          } text-sm font-medium border-b ${
+            theme === "dark" ? "border-slate-600" : "border-slate-300"
+          } flex justify-between items-center`}
+        >
           <span>{title}</span>
           <button
             onClick={() => copyToClipboard(children, id)}
-            className={`px-2 py-1 text-xs rounded ${theme === 'dark' ? 'bg-slate-600 hover:bg-slate-500 text-white' : 'bg-slate-300 hover:bg-slate-400 text-slate-800'} transition-colors duration-200`}
+            className={`px-2 py-1 text-xs rounded ${
+              theme === "dark"
+                ? "bg-slate-600 hover:bg-slate-500 text-white"
+                : "bg-slate-300 hover:bg-slate-400 text-slate-800"
+            } transition-colors duration-200`}
           >
-            {isCodeCopied === id ? '복사됨!' : '복사'}
+            {isCodeCopied === id ? "복사됨!" : "복사"}
           </button>
         </div>
       )}
       <pre className="p-4 overflow-x-auto">
-        <code className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+        <code
+          className={`text-sm ${
+            theme === "dark" ? "text-slate-300" : "text-slate-700"
+          }`}
+        >
           {children}
         </code>
       </pre>
     </div>
   );
 
+  // Content 렌더링
   const renderContent = () => {
     switch (activeSidebarItem) {
-      case 'getting-started':
+      case "api-guide":
         return (
-          <div className="space-y-8">
-            <div>
-              <h1 className={`text-4xl font-bold ${textPrimary} mb-4`}>빠른 시작 가이드</h1>
-              <p className={`text-lg ${textSecondary} mb-8`}>
-                Trading Gear API를 사용하여 첫 번째 트레이딩 봇을 만들어보세요. 
-                몇 분 안에 실제 거래를 시작할 수 있습니다.
+          <div className="space-y-24">
+            {/* 인트로 섹션 */}
+            <section className="py-16 text-center relative overflow-hidden">
+              {/* 배경 장식 */}
+              <div className="absolute inset-0 -z-10">
+                <div className="w-96 h-96 bg-blue-400/20 rounded-full blur-3xl top-0 left-1/3 absolute animate-pulse"></div>
+                <div className="w-72 h-72 bg-emerald-400/20 rounded-full blur-2xl bottom-0 right-1/4 absolute animate-pulse"></div>
+              </div>
+
+              {/* 메인 타이틀 */}
+              <h1 className="text-5xl font-extrabold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-emerald-600 leading-snug">
+                거래소 API Key 하나로 <br />
+                전략부터 매매까지
+              </h1>
+
+              {/* 서브 설명 */}
+              <p className="text-lg text-slate-600 dark:text-slate-300 max-w-3xl mx-auto mb-10">
+                어떤 거래소든 API Key만 입력하면 데이터를 가져와,
+                <span className="font-semibold"> 차트와 지표로 즉시 변환</span>
+                합니다.
+                <br />
+                사용자는 복잡한 설정 없이{" "}
+                <span className="font-semibold">
+                  전략 설계 → 분석 → 매매
+                </span>{" "}
+                전 과정을 UI로 손쉽게 진행할 수 있습니다.
+              </p>
+
+              {/* 3단계 핵심 흐름 */}
+              <div className="flex flex-col sm:flex-row justify-center gap-8 max-w-4xl mx-auto">
+                {[
+                  { icon: "🗝️", title: "API Key 입력" },
+                  { icon: "📊", title: "데이터 변환" },
+                  { icon: "⚡", title: "전략 설계 & 매매" },
+                ].map((step, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 flex-1 flex flex-col items-center gap-4"
+                  >
+                    <div className="text-4xl">{step.icon}</div>
+                    <h3 className="text-xl font-bold">{step.title}</h3>
+                  </div>
+                ))}
+              </div>
+              {/* 보안 안내 배너 */}
+              <section className="my-16 rounded-xl border-l-4 border-yellow-500 bg-yellow-50 dark:bg-slate-800 dark:border-yellow-400 p-6">
+                <p className="font-semibold text-lg">🔒 보안 안내</p>
+                <p className="mt-2">
+                  API Key는 절대 서버에 저장되지 않으며, 반드시 로컬 환경(.env)
+                  또는 안전한 비밀 저장소에 보관하세요.
+                </p>
+              </section>
+            </section>
+
+            {/* 핵심 프로세스 섹션 */}
+            {[
+              {
+                img: "/doc/main/key.png",
+                title: "① API Key 입력",
+                desc: "바이낸스, 업비트, 빗썸 등 다양한 거래소 API를 지원합니다. 키만 입력하면 즉시 연동됩니다.",
+              },
+              {
+                img: "/chart.png",
+                title: "② 데이터 변환",
+                desc: "복잡한 원시 데이터를 TradingGear가 자동 변환하여, 직관적인 차트와 지표로 제공합니다.",
+              },
+              {
+                img: "/doc/main/zonryak.png",
+                title: "③ 전략 설계",
+                desc: "UI에서 매매 전략을 손쉽게 추가하고, 백테스트 및 시뮬레이션으로 검증할 수 있습니다.",
+              },
+              {
+                img: "/doc/main/meme.png",
+                title: "④ 분석 & 매매",
+                desc: "성과 분석 대시보드와 실시간 매매 신호 제공으로, 빠르고 정확한 의사결정을 지원합니다.",
+              },
+              {
+                img: "chart.png",
+                title: "⑤ 다중 거래 모니터링",
+                desc: "여러 종목과 거래소를 동시에 모니터링하여, 빠른 판단과 대응으로 투자 효율을 극대화합니다.",
+              },
+              {
+                img: "chart.png",
+                title: "⑥ 사용자 맞춤 지표",
+                desc: "VWAP, OB Zone, ATR 등 다양한 지표를 조합해 자신만의 전략을 최적화할 수 있습니다.",
+              },
+              {
+                img: "chart.png",
+                title: "⑦ 알림 기능",
+                desc: "가격 도달, 거래량 급등락 등 중요 이벤트 발생 시 실시간 알림으로 즉시 대응 가능합니다.",
+              },
+              {
+                img: "chart.png",
+                title: "⑧ 자동매매 연동",
+                desc: "웹훅과 FastAPI 백엔드 연동으로, 전략 신호를 자동매매 시스템과 연결할 수 있습니다.",
+              },
+            ].map((step, idx) => (
+              <section
+                key={idx}
+                className={`flex flex-col lg:flex-row items-center gap-12 ${
+                  idx % 2 ? "lg:flex-row-reverse" : ""
+                }`}
+              >
+                <img
+                  src={step.img}
+                  alt={step.title}
+                  className="w-full lg:w-1/2 rounded-xl shadow-lg"
+                />
+                <div className="lg:w-1/2 space-y-4 text-center lg:text-left">
+                  <h2 className="text-3xl font-bold">{step.title}</h2>
+                  <p className="text-lg text-slate-600 dark:text-slate-300">
+                    {step.desc}
+                  </p>
+                </div>
+              </section>
+            ))}
+
+            {/* 법적 안내 */}
+            <section className="bg-slate-100 dark:bg-slate-900 text-center p-8 rounded-lg">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                ⚠️ 당사는 투자 자문이나 매매 지시를 제공하지 않습니다.
+                <br />
+                오직 차트 및 데이터 가공·시각화 프로그램만 제공합니다.
+              </p>
+            </section>
+          </div>
+        );
+
+      case "binance":
+        return (
+          <div className="space-y-6">
+            {/* 항상 보여줄 공통 보안 배너 */}
+            <div
+              className={`mb-6 rounded-lg border-l-4 p-4 ${
+                theme === "dark"
+                  ? "bg-slate-800 border-cyan-400/50 text-slate-200"
+                  : "bg-yellow-50 border-yellow-400 text-slate-800"
+              }`}
+            >
+              <p className="font-semibold">🔒 보안 안내</p>
+              <p className="text-sm mt-1">
+                API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
+                또는 안전한 비밀 저장소를 사용하세요.
               </p>
             </div>
-
-            <div className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/90'} backdrop-blur-lg rounded-xl p-6 border ${theme === 'dark' ? 'border-cyan-400/20' : 'border-blue-600/20'}`}>
-              <h2 className={`text-2xl font-semibold ${textPrimary} mb-4 flex items-center`}>
-                <span className="mr-3">⚡</span>
-                5분 만에 시작하기
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-start">
-                  <span className={`${accentColor} mr-3 mt-1`}>1.</span>
-                  <div>
-                    <h3 className={`font-semibold ${textPrimary}`}>API 키 발급</h3>
-                    <p className={`${textSecondary} text-sm`}>대시보드에서 API 키를 생성하고 권한을 설정합니다.</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <span className={`${accentColor} mr-3 mt-1`}>2.</span>
-                  <div>
-                    <h3 className={`font-semibold ${textPrimary}`}>SDK 설치</h3>
-                    <p className={`${textSecondary} text-sm`}>선호하는 언어의 SDK를 설치합니다.</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <span className={`${accentColor} mr-3 mt-1`}>3.</span>
-                  <div>
-                    <h3 className={`font-semibold ${textPrimary}`}>첫 번째 봇 생성</h3>
-                    <p className={`${textSecondary} text-sm`}>간단한 예제 코드로 트레이딩 봇을 만들어보세요.</p>
-                  </div>
-                </div>
-              </div>
+            <h1 className={`text-3xl font-bold ${textPrimary}`}>
+              바이낸스 API 연동
+            </h1>
+            <ol className={`${textSecondary} list-decimal ml-6 space-y-3`}>
+              <li>바이낸스 계정 로그인 후 API 관리 페이지 접속</li>
+              <li>새 API 키 생성, IP 제한 설정</li>
+              <li>TradingGear 차트에서 API 입력란에 Key와 Secret 입력</li>
+              <li>테스트용 샌드박스 연결 확인</li>
+            </ol>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <img
+                src="/docs/binance1.png"
+                alt="바이낸스 API 1"
+                className="rounded-lg border"
+              />
+              <img
+                src="/docs/binance2.png"
+                alt="바이낸스 API 2"
+                className="rounded-lg border"
+              />
             </div>
+          </div>
+        );
 
-            <div>
-              <h2 className={`text-2xl font-semibold ${textPrimary} mb-4`}>SDK 설치</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>Node.js</h3>
-                  <CodeBlock id="install-nodejs" title="npm install">
-{`npm install trading-gear-sdk
-
-# 또는 yarn 사용
-yarn add trading-gear-sdk`}
-                  </CodeBlock>
-                </div>
-                <div>
-                  <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>Python</h3>
-                  <CodeBlock id="install-python" title="pip install">
-{`pip install trading-gear-sdk
-
-# 또는 conda 사용
-conda install trading-gear-sdk`}
-                  </CodeBlock>
-                </div>
-              </div>
+      case "upbit":
+        return (
+          <div className="space-y-6">
+            {/* 항상 보여줄 공통 보안 배너 */}
+            <div
+              className={`mb-6 rounded-lg border-l-4 p-4 ${
+                theme === "dark"
+                  ? "bg-slate-800 border-cyan-400/50 text-slate-200"
+                  : "bg-yellow-50 border-yellow-400 text-slate-800"
+              }`}
+            >
+              <p className="font-semibold">🔒 보안 안내</p>
+              <p className="text-sm mt-1">
+                API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
+                또는 안전한 비밀 저장소를 사용하세요.
+              </p>
             </div>
+            <h1 className={`text-3xl font-bold ${textPrimary}`}>
+              업비트 API 연동
+            </h1>
+            <ol className={`${textSecondary} list-decimal ml-6 space-y-3`}>
+              <li>업비트 계정 로그인 후 API 관리 페이지 접속</li>
+              <li>API Key 생성, 권한 및 IP 제한 설정</li>
+              <li>TradingGear 차트에 Key 입력</li>
+            </ol>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <img
+                src="/docs/upbit1.png"
+                alt="업비트 API 1"
+                className="rounded-lg border"
+              />
+            </div>
+          </div>
+        );
 
-            <div>
-              <h2 className={`text-2xl font-semibold ${textPrimary} mb-4`}>첫 번째 봇 만들기</h2>
-              <CodeBlock id="first-bot" title="app.js" language="javascript">
-{`// Trading Gear SDK 사용 예제
-const TradingGear = require('trading-gear-sdk');
+      case "bithumb":
+        return (
+          <div className="space-y-6">
+            {/* 항상 보여줄 공통 보안 배너 */}
+            <div
+              className={`mb-6 rounded-lg border-l-4 p-4 ${
+                theme === "dark"
+                  ? "bg-slate-800 border-cyan-400/50 text-slate-200"
+                  : "bg-yellow-50 border-yellow-400 text-slate-800"
+              }`}
+            >
+              <p className="font-semibold">🔒 보안 안내</p>
+              <p className="text-sm mt-1">
+                API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
+                또는 안전한 비밀 저장소를 사용하세요.
+              </p>
+            </div>
+            <h1 className={`text-3xl font-bold ${textPrimary}`}>
+              빗썸 API 연동
+            </h1>
+            <ol className={`${textSecondary} list-decimal ml-6 space-y-3`}>
+              <li>빗썸 계정 로그인 후 API 관리 페이지 접속</li>
+              <li>API Key 생성, 권한 및 IP 제한 설정</li>
+              <li>TradingGear 차트에 Key 입력</li>
+            </ol>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <img
+                src="/docs/bithumb1.png"
+                alt="빗썸 API 1"
+                className="rounded-lg border"
+              />
+            </div>
+          </div>
+        );
 
-// API 클라이언트 초기화
-const client = new TradingGear({
-  apiKey: 'your-api-key',
-  apiSecret: 'your-api-secret',
-  sandbox: true // 테스트용
-});
+      case "security":
+        return (
+          <div className="space-y-6">
+            <h1 className={`text-3xl font-bold ${textPrimary}`}>보안 안내</h1>
+            <p className={`${textSecondary}`}>
+              API Key는 절대 서버에 저장하지 않고, 로컬 환경에만 저장하세요.
+              환경 변수나 안전한 파일을 사용하여 관리합니다.
+            </p>
+            <CodeBlock id="security-note" title="보안 권장 사항">
+              {`// API Key를 .env에 저장
+TRADING_GEAR_API_KEY=your-api-key
+TRADING_GEAR_API_SECRET=your-api-secret
 
-// 간단한 그리드 트레이딩 봇 생성
-async function createGridBot() {
-  try {
-    const bot = await client.bots.create({
-      type: 'grid',
-      symbol: 'BTC/USDT',
-      exchange: 'binance',
-      config: {
-        gridSpacing: 0.5, // 0.5% 간격
-        gridSize: 10,     // 10개 그리드
-        baseAmount: 100   // 100 USDT
-      }
-    });
-    
-    console.log('봇이 생성되었습니다:', bot.id);
-    
-    // 봇 시작
-    await client.bots.start(bot.id);
-    console.log('봇이 시작되었습니다!');
-    
-    return bot;
-  } catch (error) {
-    console.error('오류 발생:', error.message);
-  }
+// 서버에 Key 저장 금지`}
+            </CodeBlock>
+          </div>
+        );
+
+      case "examples":
+        return (
+          <div className="space-y-6">
+            <h1 className={`text-3xl font-bold ${textPrimary}`}>응용 예시</h1>
+            <p className={`${textSecondary}`}>
+              TradingGear SDK를 활용한 간단한 봇 예제입니다.
+            </p>
+            <CodeBlock id="example-bot" title="app.js">
+              {`const TradingGear = require('trading-gear-sdk');
+
+const client = new TradingGear({ apiKey: '...', apiSecret: '...' });
+
+async function createBot() {
+  const bot = await client.bots.createGrid({ symbol: 'BTC/USDT', gridSize: 10 });
+  await client.bots.start(bot.id);
+  console.log('봇 시작 완료');
 }
 
-// 봇 생성 실행
-createGridBot();`}
-              </CodeBlock>
-            </div>
+createBot();`}
+            </CodeBlock>
           </div>
         );
 
-      case 'rest-api':
+      case "faq":
         return (
           <div className="space-y-8">
-            <div>
-              <h1 className={`text-4xl font-bold ${textPrimary} mb-4`}>REST API 명세</h1>
-              <p className={`text-lg ${textSecondary} mb-8`}>
-                Trading Gear의 모든 기능에 접근할 수 있는 RESTful API입니다. 
-                실시간 데이터, 거래 실행, 봇 관리 등 모든 기능을 제공합니다.
-              </p>
-            </div>
-
-            <div className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/90'} backdrop-blur-lg rounded-xl p-6 border ${theme === 'dark' ? 'border-cyan-400/20' : 'border-blue-600/20'}`}>
-              <h2 className={`text-2xl font-semibold ${textPrimary} mb-4`}>기본 정보</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className={`font-semibold ${textPrimary} mb-2`}>Base URL</h3>
-                  <code className={`${theme === 'dark' ? 'bg-slate-700 text-cyan-300' : 'bg-slate-200 text-blue-700'} px-2 py-1 rounded text-sm`}>
-                    https://api.trading-gear.com/v1
-                  </code>
-                </div>
-                <div>
-                  <h3 className={`font-semibold ${textPrimary} mb-2`}>Rate Limit</h3>
-                  <code className={`${theme === 'dark' ? 'bg-slate-700 text-cyan-300' : 'bg-slate-200 text-blue-700'} px-2 py-1 rounded text-sm`}>
-                    1000 requests/minute
-                  </code>
-                </div>
+            <h1 className={`text-3xl font-bold ${textPrimary}`}>FAQ</h1>
+            <div className="space-y-4">
+              <div
+                className={`border-l-4 ${
+                  theme === "dark" ? "border-cyan-400" : "border-blue-600"
+                } pl-4`}
+              >
+                <h3 className={`font-semibold ${textPrimary}`}>
+                  Q. API 키는 어떻게 생성하나요?
+                </h3>
+                <p className={`${textSecondary} text-sm`}>
+                  대시보드에서 새 API 키를 생성하고 필요한 권한과 IP 제한을
+                  설정하세요.
+                </p>
               </div>
-            </div>
-
-            <div>
-              <h2 className={`text-2xl font-semibold ${textPrimary} mb-4`}>인증</h2>
-              <p className={`${textSecondary} mb-4`}>모든 API 요청은 API 키와 서명이 필요합니다.</p>
-              <CodeBlock id="auth-headers" title="Request Headers">
-              </CodeBlock>
-            </div>
-
-            <div>
-              <h2 className={`text-2xl font-semibold ${textPrimary} mb-4`}>주요 엔드포인트</h2>
-              
-              <div className="space-y-6">
-                <div className={`${theme === 'dark' ? 'bg-slate-800/40' : 'bg-white/60'} rounded-lg p-4 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-300'}`}>
-                  <h3 className={`text-lg font-medium ${textPrimary} mb-2 flex items-center`}>
-                    <span className={`px-2 py-1 text-xs rounded mr-3 ${theme === 'dark' ? 'bg-green-600' : 'bg-green-500'} text-white`}>GET</span>
-                    봇 목록 조회
-                  </h3>
-                  <code className={`${textSecondary} text-sm`}>/bots</code>
-                  <p className={`${textSecondary} text-sm mt-2`}>사용자의 모든 트레이딩 봇 목록을 반환합니다.</p>
-                  
-                  <CodeBlock id="get-bots" title="Example Response" language="json">
-                  </CodeBlock>
-                </div>
-
-                <div className={`${theme === 'dark' ? 'bg-slate-800/40' : 'bg-white/60'} rounded-lg p-4 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-300'}`}>
-                  <h3 className={`text-lg font-medium ${textPrimary} mb-2 flex items-center`}>
-                    <span className={`px-2 py-1 text-xs rounded mr-3 ${theme === 'dark' ? 'bg-blue-600' : 'bg-blue-500'} text-white`}>POST</span>
-                    봇 생성
-                  </h3>
-                  <code className={`${textSecondary} text-sm`}>/bots</code>
-                  <p className={`${textSecondary} text-sm mt-2`}>새로운 트레이딩 봇을 생성합니다.</p>
-                  
-                  <CodeBlock id="create-bot" title="Example Request" language="json">
-                  </CodeBlock>
-                </div>
-
-                <div className={`${theme === 'dark' ? 'bg-slate-800/40' : 'bg-white/60'} rounded-lg p-4 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-300'}`}>
-                  <h3 className={`text-lg font-medium ${textPrimary} mb-2 flex items-center`}>
-                    <span className={`px-2 py-1 text-xs rounded mr-3 ${theme === 'dark' ? 'bg-yellow-600' : 'bg-yellow-500'} text-white`}>PUT</span>
-                    봇 시작/중지
-                  </h3>
-                  <code className={`${textSecondary} text-sm`}>/bots/:id/status</code>
-                  <p className={`${textSecondary} text-sm mt-2`}>봇의 상태를 변경합니다.</p>
-                  
-                  <CodeBlock id="bot-status" title="Example Request" language="json">
-                  </CodeBlock>
-                </div>
+              <div
+                className={`border-l-4 ${
+                  theme === "dark" ? "border-cyan-400" : "border-blue-600"
+                } pl-4`}
+              >
+                <h3 className={`font-semibold ${textPrimary}`}>
+                  Q. API Key를 서버에 저장해도 되나요?
+                </h3>
+                <p className={`${textSecondary} text-sm`}>
+                  권장하지 않습니다. 반드시 로컬 환경이나 안전한 파일에만
+                  저장하세요.
+                </p>
               </div>
-            </div>
-          </div>
-        );
-
-      case 'sdk-libraries':
-        return (
-          <div className="space-y-8">
-            <div>
-              <h1 className={`text-4xl font-bold ${textPrimary} mb-4`}>SDK & 라이브러리</h1>
-              <p className={`text-lg ${textSecondary} mb-8`}>
-                다양한 프로그래밍 언어로 제공되는 Trading Gear SDK를 사용하여 
-                빠르고 쉽게 트레이딩 애플리케이션을 개발하세요.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/90'} backdrop-blur-lg rounded-xl p-6 border ${theme === 'dark' ? 'border-cyan-400/20' : 'border-blue-600/20'}`}>
-                <h2 className={`text-2xl font-semibold ${textPrimary} mb-4 flex items-center`}>
-                  <span className="mr-3">🟨</span>
-                  JavaScript SDK
-                </h2>
-                <p className={`${textSecondary} mb-4`}>Node.js와 브라우저 환경을 모두 지원합니다.</p>
-                
-                <h3 className={`font-medium ${textPrimary} mb-2`}>설치</h3>
-                <CodeBlock id="js-install" title="npm">
-{`npm install trading-gear-sdk`}
-                </CodeBlock>
-
-                <h3 className={`font-medium ${textPrimary} mb-2 mt-4`}>기본 사용법</h3>
-                <CodeBlock id="js-usage" title="index.js" language="javascript">
-{`const TradingGear = require('trading-gear-sdk');
-
-const client = new TradingGear({
-  apiKey: process.env.TRADING_GEAR_API_KEY,
-  apiSecret: process.env.TRADING_GEAR_API_SECRET
-});
-
-// 계정 정보 조회
-async function getAccount() {
-  try {
-    const account = await client.account.getInfo();
-    console.log('계정 정보:', account);
-    return account;
-  } catch (error) {
-    console.error('오류:', error.message);
-  }
-}
-
-// 그리드 봇 생성
-async function createGridBot() {
-  const bot = await client.bots.createGrid({
-    symbol: 'BTC/USDT',
-    exchange: 'binance',
-    gridSpacing: 0.5,
-    gridSize: 10,
-    baseAmount: 100
-  });
-  
-  console.log('봇 생성됨:', bot.id);
-  return bot;
-}`}
-                </CodeBlock>
-              </div>
-
-              <div className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/90'} backdrop-blur-lg rounded-xl p-6 border ${theme === 'dark' ? 'border-cyan-400/20' : 'border-blue-600/20'}`}>
-                <h2 className={`text-2xl font-semibold ${textPrimary} mb-4 flex items-center`}>
-                  <span className="mr-3">🐍</span>
-                  Python SDK
-                </h2>
-                <p className={`${textSecondary} mb-4`}>데이터 분석과 백테스팅에 최적화되어 있습니다.</p>
-                
-                <h3 className={`font-medium ${textPrimary} mb-2`}>설치</h3>
-                <CodeBlock id="py-install" title="pip">
-{`pip install trading-gear-sdk`}
-                </CodeBlock>
-
-                <h3 className={`font-medium ${textPrimary} mb-2 mt-4`}>기본 사용법</h3>
-                <CodeBlock id="py-usage" title="main.py" language="python">
-{`from trading_gear import TradingGear
-import os
-
-# 클라이언트 초기화
-client = TradingGear(
-    api_key=os.getenv('TRADING_GEAR_API_KEY'),
-    api_secret=os.getenv('TRADING_GEAR_API_SECRET')
-)
-
-# 계정 정보 조회
-def get_account():
-    try:
-        account = client.account.get_info()
-        print('계정 정보:', account)
-        return account
-    except Exception as error:
-        print('오류:', str(error))
-
-# DCA 봇 생성
-def create_dca_bot():
-    bot = client.bots.create_dca(
-        symbol='ETH/USDT',
-        exchange='binance',
-        investment_amount=500,
-        dca_interval='1h',
-        take_profit=20
-    )
-    
-    print('DCA 봇 생성됨:', bot.id)
-    return bot`}
-                </CodeBlock>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'faq':
-        return (
-          <div className="space-y-8">
-            <div>
-              <h1 className={`text-4xl font-bold ${textPrimary} mb-4`}>자주 묻는 질문 (FAQ)</h1>
-              <p className={`text-lg ${textSecondary} mb-8`}>
-                개발자들이 자주 묻는 질문들과 상세한 답변을 모았습니다. 
-                문제 해결과 개발에 도움이 되는 정보를 제공합니다.
-              </p>
-            </div>
-
-            <div className="space-y-6">
-              {[
-                {
-                  category: '🔐 인증 & 보안',
-                  questions: [
-                    {
-                      q: 'API 키는 어떻게 생성하나요?',
-                      a: '대시보드의 "설정 > API 관리" 페이지에서 새 API 키를 생성할 수 있습니다. 키 생성 시 필요한 권한을 선택하고, IP 주소 제한을 설정하는 것을 권장합니다.'
-                    },
-                    {
-                      q: 'API 서명은 어떻게 생성하나요?',
-                      a: 'HMAC-SHA256을 사용하여 서명을 생성합니다. 요청 메소드, URL 경로, 타임스탬프, 요청 본문을 연결한 문자열을 API Secret으로 서명합니다.'
-                    },
-                    {
-                      q: 'Rate Limit에 걸렸을 때는 어떻게 하나요?',
-                      a: 'HTTP 429 응답을 받으면 잠시 기다린 후 재시도하세요. Retry-After 헤더의 값만큼 대기하는 것을 권장합니다.'
-                    }
-                  ]
-                },
-                {
-                  category: '🤖 봇 관리',
-                  questions: [
-                    {
-                      q: '하나의 계정에서 몇 개의 봇을 실행할 수 있나요?',
-                      a: '플랜에 따라 다릅니다. Basic: 20개, Pro: 95개, Ultimate: 무제한입니다. 각 봇은 독립적으로 실행되며 서로 영향을 주지 않습니다.'
-                    },
-                    {
-                      q: '봇이 예상과 다르게 작동할 때는 어떻게 하나요?',
-                      a: '먼저 봇의 로그를 확인하세요. API의 /bots/:id/logs 엔드포인트로 상세한 실행 로그를 조회할 수 있습니다.'
-                    }
-                  ]
-                },
-                {
-                  category: '📊 데이터 & 분석',
-                  questions: [
-                    {
-                      q: '실시간 데이터의 지연시간은 얼마나 되나요?',
-                      a: 'WebSocket을 통한 실시간 데이터는 평균 10-50ms의 지연시간을 가집니다. 거래소별로 차이가 있습니다.'
-                    },
-                    {
-                      q: '과거 데이터는 얼마나 오래 보관되나요?',
-                      a: '가격 데이터는 5년간 보관되며, 거래 내역은 무제한 보관됩니다. 플랜에 따라 백테스팅 가능한 기간이 다릅니다.'
-                    }
-                  ]
-                }
-              ].map((category, categoryIndex) => (
-                <div key={categoryIndex} className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/90'} backdrop-blur-lg rounded-xl p-6 border ${theme === 'dark' ? 'border-cyan-400/20' : 'border-blue-600/20'}`}>
-                  <h2 className={`text-xl font-bold ${textPrimary} mb-6`}>
-                    {category.category}
-                  </h2>
-                  <div className="space-y-4">
-                    {category.questions.map((faq, index) => (
-                      <div key={index} className={`border-l-4 ${theme === 'dark' ? 'border-cyan-400' : 'border-blue-600'} pl-4`}>
-                        <h3 className={`font-semibold ${textPrimary} mb-2`}>
-                          Q. {faq.q}
-                        </h3>
-                        <p className={`${textSecondary} text-sm leading-relaxed`}>
-                          A. {faq.a}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         );
@@ -462,44 +427,87 @@ def create_dca_bot():
     }
   };
 
+  // Sidebar 버튼 렌더링 (children 있는 경우 하위 메뉴 표시)
+  const renderSidebar = () => (
+    <aside
+      className={`hidden lg:block w-60 h-screen sticky top-20 ${
+        theme === "dark" ? "bg-slate-800/60" : "bg-white/90"
+      } backdrop-blur-lg border-r ${
+        theme === "dark" ? "border-cyan-400/20" : "border-blue-600/20"
+      } overflow-y-auto`}
+    >
+      <div className="p-4">
+        <h2 className={`text-md font-bold ${textPrimary} mb-4`}>문서 목차</h2>
+        <nav className="space-y-2">
+          {sidebarItems.map((item) => (
+            <div key={item.id}>
+              <button
+                onClick={() => {
+                  // 상위 메뉴 클릭 시에만 toggle
+                  if (item.children) {
+                    setActiveSidebarItem((prev) =>
+                      prev === item.id ? "" : item.id
+                    );
+                  } else {
+                    setActiveSidebarItem(item.id);
+                  }
+                }}
+                className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-all duration-200 flex items-center ${
+                  activeSidebarItem === item.id
+                    ? `${
+                        theme === "dark"
+                          ? "bg-cyan-400/20 text-cyan-400"
+                          : "bg-blue-600/20 text-blue-600"
+                      } font-medium`
+                    : `${textSecondary} hover:${primaryColor.replace(
+                        "text-",
+                        "text-"
+                      )} hover:bg-opacity-10`
+                }`}
+              >
+                <span className="mr-2">{item.icon}</span>
+                {item.title}
+              </button>
+
+              {item.children && (
+                <div className="pl-6 mt-1 space-y-1">
+                  {item.children.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => setActiveSidebarItem(child.id)}
+                      className={`w-full text-left text-sm px-2 py-1 rounded-lg transition-all duration-200 ${
+                        activeSidebarItem === child.id
+                          ? `${
+                              theme === "dark"
+                                ? "bg-cyan-400/20 text-cyan-400"
+                                : "bg-blue-600/20 text-blue-600"
+                            } font-medium`
+                          : `${textSecondary} hover:${primaryColor.replace(
+                              "text-",
+                              "text-"
+                            )} hover:bg-opacity-10`
+                      }`}
+                    >
+                      {child.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </nav>
+      </div>
+    </aside>
+  );
+
   return (
     <div className={`min-h-screen transition-all duration-300 ${themeClasses}`}>
-      
-      {/* Header */}
-      <Header/>
-      {/* Main Content */}
+      <Header />
       <div className="max-w-7xl mx-auto px-4 lg:px-8 flex pt-20">
-        
-        {/* Sidebar */}
-        <aside className={`hidden lg:block w-52 h-screen sticky top-20 ${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/90'} backdrop-blur-lg border-r ${theme === 'dark' ? 'border-cyan-400/20' : 'border-blue-600/20'} overflow-y-auto`}>
-          <div className="p-4">
-            <h2 className={`text-md font-bold ${textPrimary} mb-4`}>문서 목차</h2>
-            <nav className="space-y-2">
-              {sidebarItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveSidebarItem(item.id)}
-                  className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-all duration-200 flex items-center ${
-                    activeSidebarItem === item.id
-                      ? `${theme === 'dark' ? 'bg-cyan-400/20 text-cyan-400' : 'bg-blue-600/20 text-blue-600'} font-medium`
-                      : `${textSecondary} hover:${primaryColor.replace('text-', 'text-')} hover:bg-opacity-10`
-                  }`}
-                >
-                  <span className="mr-2">{item.icon}</span>
-                  {item.title}
-                </button>
-              ))}
-            </nav>
-          </div>
-        </aside>
-
-        {/* Content */}
-        <main className="flex-1 p-6 lg:p-12 max-w-full">
-          {renderContent()}
-        </main>
+        {renderSidebar()}
+        <main className="flex-1 p-6 lg:p-12 max-w-full">{renderContent()}</main>
       </div>
-      {/* Footer */}
       <Footer onLinkClick={(linkName) => linkName} />
     </div>
   );
-};
+}

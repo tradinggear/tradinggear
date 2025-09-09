@@ -57,10 +57,21 @@ export default function FeaturesPage() {
             playsInline
             className="w-full max-w-4xl mx-auto rounded-2xl aspect-video"
           />
+          <ul className="mt-6 flex flex-wrap justify-center gap-4 text-sm lg:text-base font-medium">
+            <li className="px-4 py-2 rounded-full bg-slate-200/40 dark:bg-slate-700/50">
+              실시간 데이터 반영
+            </li>
+            <li className="px-4 py-2 rounded-full bg-slate-200/40 dark:bg-slate-700/50">
+              친숙한 UI
+            </li>
+            <li className="px-4 py-2 rounded-full bg-slate-200/40 dark:bg-slate-700/50">
+              전문가급 분석 도구
+            </li>
+          </ul>
         </section>
         {/* 기능 카드 섹션 */}
         <section
-          className={`py-10 ${
+          className={`py-5 ${
             theme === "dark"
               ? "bg-gradient-to-b from-transparent to-slate-800/30"
               : "bg-gradient-to-b from-transparent to-slate-100/50"
@@ -206,7 +217,7 @@ export default function FeaturesPage() {
         {/* 하단 패널 / CTA */}
         <section className="py-20 text-center">
           <h2 className={`text-3xl lg:text-5xl font-bold mb-12 ${textPrimary}`}>
-            똑똑한 거래 관리
+            📊 고급 분석 도구
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto px-4 lg:px-8">
             {[
