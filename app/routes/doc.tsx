@@ -3,6 +3,7 @@ import { useThemeStore } from "../stores/themeStore";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import type { MetaFunction } from "@remix-run/node";
+import BinanceGuide from "@/components/page/doc/binance";
 
 export const meta: MetaFunction = () => {
   return [
@@ -15,6 +16,8 @@ export default function DocsPage() {
   const { theme, initializeTheme } = useThemeStore();
   const [activeSidebarItem, setActiveSidebarItem] = useState("api-guide");
   const [isCodeCopied, setIsCodeCopied] = useState("");
+
+  const [modalImg, setModalImg] = useState<string | null>(null);
 
   useEffect(() => {
     initializeTheme();
@@ -103,7 +106,7 @@ export default function DocsPage() {
     switch (activeSidebarItem) {
       case "api-guide":
         return (
-          <div className="space-y-24">
+          <div className="space-y-10">
             {/* 인트로 섹션 */}
             <section className="py-16 text-center relative overflow-hidden">
               {/* 배경 장식 */}
@@ -113,42 +116,90 @@ export default function DocsPage() {
               </div>
 
               {/* 메인 타이틀 */}
-              <h1 className="text-5xl font-extrabold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-emerald-600 leading-snug">
+              <h1
+                className={`text-4xl lg:text-6xl font-bold mb-6 bg-clip-text text-transparent ${
+                  theme === "dark"
+                    ? "bg-gradient-to-r from-white to-cyan-400"
+                    : "bg-gradient-to-r from-slate-900 to-blue-600"
+                }`}
+              >
                 거래소 API Key 하나로 <br />
-                전략부터 매매까지
+                전략 설계와 차트 분석을
               </h1>
 
               {/* 서브 설명 */}
-              <p className="text-lg text-slate-600 dark:text-slate-300 max-w-3xl mx-auto mb-10">
+              <p className={`text-lg ${textSecondary} max-w-3xl mx-auto mb-10`}>
                 어떤 거래소든 API Key만 입력하면 데이터를 가져와,
                 <span className="font-semibold"> 차트와 지표로 즉시 변환</span>
                 합니다.
                 <br />
                 사용자는 복잡한 설정 없이{" "}
                 <span className="font-semibold">
-                  전략 설계 → 분석 → 매매
+                  전략 설계 → 분석 → 알림 설정
                 </span>{" "}
-                전 과정을 UI로 손쉽게 진행할 수 있습니다.
+                전 과정을 <br />
+                UI로 손쉽게 진행할 수 있습니다.
               </p>
 
-              {/* 3단계 핵심 흐름 */}
               <div className="flex flex-col sm:flex-row justify-center gap-8 max-w-4xl mx-auto">
                 {[
-                  { icon: "🗝️", title: "API Key 입력" },
-                  { icon: "📊", title: "데이터 변환" },
-                  { icon: "⚡", title: "전략 설계 & 매매" },
+                  {
+                    icon: "🗝️",
+                    title: "API Key 입력",
+                    desc: "거래소에서 발급받은 Key를 안전하게 입력합니다.",
+                  },
+                  {
+                    icon: "📊",
+                    title: "데이터 변환",
+                    desc: "원시 데이터를 차트와 지표로 즉시 변환합니다.",
+                  },
+                  {
+                    icon: "⚡",
+                    title: "전략 설계 시각화",
+                    desc: "쉬운 UI를 이용해 전략을 시각화하고, 커스텀 지표를 표시합니다.",
+                  },
                 ].map((step, idx) => (
                   <div
                     key={idx}
-                    className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 flex-1 flex flex-col items-center gap-4"
+                    className={`
+        rounded-2xl p-6 flex-1 flex flex-col items-center gap-3 text-center transition-all duration-300 hover:-translate-y-1
+        ${
+          theme === "dark"
+            ? "bg-slate-950/80 border border-slate-700/60 shadow-lg shadow-cyan-400/5 hover:shadow-cyan-400/10 text-slate-100"
+            : "bg-white/90 border border-blue-200/30 shadow-md hover:shadow-xl text-slate-900"
+        }
+      `}
                   >
                     <div className="text-4xl">{step.icon}</div>
-                    <h3 className="text-xl font-bold">{step.title}</h3>
+                    <h3
+                      className={`text-xl font-bold ${
+                        theme === "dark" ? "text-slate-200" : "text-slate-800"
+                      }`}
+                    >
+                      {step.title}
+                    </h3>
+                    <p
+                      className={`text-sm ${
+                        theme === "dark" ? "text-slate-400" : "text-slate-600"
+                      }`}
+                    >
+                      {step.desc}
+                    </p>
                   </div>
                 ))}
               </div>
+
               {/* 보안 안내 배너 */}
-              <section className="my-16 rounded-xl border-l-4 border-yellow-500 bg-yellow-50 dark:bg-slate-800 dark:border-yellow-400 p-6">
+              <section
+                className={`
+    mt-10 mb-0 rounded-xl p-6 transition-all duration-300
+    ${
+      theme === "dark"
+        ? "bg-slate-950/70 border border-yellow-400/40 shadow-md shadow-yellow-400/5 text-slate-200"
+        : "bg-yellow-50 border-l-4 border-yellow-500 text-slate-900"
+    }
+  `}
+              >
                 <p className="font-semibold text-lg">🔒 보안 안내</p>
                 <p className="mt-2">
                   API Key는 절대 서버에 저장되지 않으며, 반드시 로컬 환경(.env)
@@ -176,8 +227,8 @@ export default function DocsPage() {
               },
               {
                 img: "/doc/main/meme.png",
-                title: "④ 분석 & 매매",
-                desc: "성과 분석 대시보드와 실시간 매매 신호 제공으로, 빠르고 정확한 의사결정을 지원합니다.",
+                title: "④ 성과 분석과 알림",
+                desc: "성과 분석 대시보드와 실시간 신호 제공으로, 빠르고 정확한 의사결정을 지원합니다.",
               },
               {
                 img: "chart.png",
@@ -185,19 +236,14 @@ export default function DocsPage() {
                 desc: "여러 종목과 거래소를 동시에 모니터링하여, 빠른 판단과 대응으로 투자 효율을 극대화합니다.",
               },
               {
-                img: "chart.png",
+                img: "/doc/main/vwap.png",
                 title: "⑥ 사용자 맞춤 지표",
                 desc: "VWAP, OB Zone, ATR 등 다양한 지표를 조합해 자신만의 전략을 최적화할 수 있습니다.",
               },
               {
-                img: "chart.png",
+                img: "/doc/main/alram.png",
                 title: "⑦ 알림 기능",
                 desc: "가격 도달, 거래량 급등락 등 중요 이벤트 발생 시 실시간 알림으로 즉시 대응 가능합니다.",
-              },
-              {
-                img: "chart.png",
-                title: "⑧ 자동매매 연동",
-                desc: "웹훅과 FastAPI 백엔드 연동으로, 전략 신호를 자동매매 시스템과 연결할 수 있습니다.",
               },
             ].map((step, idx) => (
               <section
@@ -209,16 +255,46 @@ export default function DocsPage() {
                 <img
                   src={step.img}
                   alt={step.title}
-                  className="w-full lg:w-1/2 rounded-xl shadow-lg"
+                  onClick={() => setModalImg(step.img)} // ✅ 클릭 시 모달 열기
+                  className={`w-full lg:w-1/2 rounded-xl border cursor-zoom-in transition-all duration-300
+        ${
+          theme === "dark"
+            ? "shadow-lg shadow-cyan-400/10 border-slate-700"
+            : "shadow-lg border-slate-200"
+        }`}
                 />
                 <div className="lg:w-1/2 space-y-4 text-center lg:text-left">
-                  <h2 className="text-3xl font-bold">{step.title}</h2>
-                  <p className="text-lg text-slate-600 dark:text-slate-300">
+                  <h2
+                    className={`text-3xl font-bold transition-colors ${
+                      theme === "dark" ? "text-slate-100" : "text-slate-900"
+                    }`}
+                  >
+                    {step.title}
+                  </h2>
+                  <p
+                    className={`text-lg leading-relaxed ${
+                      theme === "dark" ? "text-slate-300" : "text-slate-600"
+                    }`}
+                  >
                     {step.desc}
                   </p>
                 </div>
               </section>
             ))}
+
+            {modalImg && (
+              <button
+                className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4 cursor-zoom-out"
+                onClick={() => setModalImg(null)}
+                aria-label="이미지 닫기"
+              >
+                <img
+                  src={modalImg}
+                  alt="확대 이미지"
+                  className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl"
+                />
+              </button>
+            )}
 
             {/* 법적 안내 */}
             <section className="bg-slate-100 dark:bg-slate-900 text-center p-8 rounded-lg">
@@ -233,112 +309,190 @@ export default function DocsPage() {
 
       case "binance":
         return (
-          <div className="space-y-6">
-            {/* 항상 보여줄 공통 보안 배너 */}
-            <div
-              className={`mb-6 rounded-lg border-l-4 p-4 ${
-                theme === "dark"
-                  ? "bg-slate-800 border-cyan-400/50 text-slate-200"
-                  : "bg-yellow-50 border-yellow-400 text-slate-800"
-              }`}
-            >
-              <p className="font-semibold">🔒 보안 안내</p>
-              <p className="text-sm mt-1">
-                API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
-                또는 안전한 비밀 저장소를 사용하세요.
-              </p>
+          <div className="space-y-6 relative">
+            {/* 배경 장식 */}
+            <div className="absolute inset-0 -z-10">
+              <div className="w-72 h-72 bg-blue-400/10 rounded-full blur-3xl top-0 left-1/3 absolute animate-pulse"></div>
+              <div className="w-56 h-56 bg-emerald-400/10 rounded-full blur-2xl bottom-0 right-1/4 absolute animate-pulse"></div>
             </div>
-            <h1 className={`text-3xl font-bold ${textPrimary}`}>
+
+            {/* 섹션 타이틀 */}
+            <h1
+              className={`text-3xl lg:text-4xl font-bold transition-colors ${textPrimary}`}
+            >
               바이낸스 API 연동
             </h1>
-            <ol className={`${textSecondary} list-decimal ml-6 space-y-3`}>
-              <li>바이낸스 계정 로그인 후 API 관리 페이지 접속</li>
-              <li>새 API 키 생성, IP 제한 설정</li>
-              <li>TradingGear 차트에서 API 입력란에 Key와 Secret 입력</li>
-              <li>테스트용 샌드박스 연결 확인</li>
+
+            {/* 단계 요약 리스트 카드화 */}
+            <ol className="space-y-4">
+              {[
+                "바이낸스 계정 로그인 후 API 관리 페이지 접속",
+                "새 API 키 생성, IP 제한 설정",
+                "TradingGear 차트에서 API 입력란에 Key와 Secret 입력",
+                "테스트용 샌드박스 연결 확인",
+              ].map((step, idx) => (
+                <li
+                  key={idx}
+                  className={`p-4 rounded-2xl border transition-all duration-300 flex items-center gap-3
+          ${
+            theme === "dark"
+              ? "bg-slate-950/80 border-slate-700/50 shadow-sm hover:shadow-cyan-400/20 text-slate-200 hover:-translate-y-1"
+              : "bg-white border-blue-200/40 shadow-sm hover:shadow-blue-400/20 text-slate-900 hover:-translate-y-1"
+          }`}
+                >
+                  <span className="text-xl">{idx + 1}.</span>
+                  <p className="text-sm lg:text-base">{step}</p>
+                </li>
+              ))}
             </ol>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <img
-                src="/docs/binance1.png"
-                alt="바이낸스 API 1"
-                className="rounded-lg border"
-              />
-              <img
-                src="/docs/binance2.png"
-                alt="바이낸스 API 2"
-                className="rounded-lg border"
-              />
+
+            {/* 보안 안내 배너 */}
+            <div
+              className={`mb-6 rounded-xl p-6 border-l-4 flex items-start gap-4 transition-all duration-300
+      ${
+        theme === "dark"
+          ? "bg-gradient-to-r from-slate-950/80 to-slate-900/80 border-cyan-400/50 shadow-md text-slate-200"
+          : "bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-400 shadow-md text-slate-900"
+      }`}
+            >
+              <div className="text-2xl mt-1">🔒</div>
+              <div>
+                <p className="font-semibold text-lg">보안 안내</p>
+                <p className="mt-1 text-sm leading-relaxed">
+                  API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
+                  또는 안전한 비밀 저장소에 보관하세요.
+                </p>
+              </div>
             </div>
+
+            {/* 실제 단계별 상세 가이드 */}
+            <BinanceGuide />
           </div>
         );
 
       case "upbit":
         return (
-          <div className="space-y-6">
-            {/* 항상 보여줄 공통 보안 배너 */}
-            <div
-              className={`mb-6 rounded-lg border-l-4 p-4 ${
-                theme === "dark"
-                  ? "bg-slate-800 border-cyan-400/50 text-slate-200"
-                  : "bg-yellow-50 border-yellow-400 text-slate-800"
-              }`}
-            >
-              <p className="font-semibold">🔒 보안 안내</p>
-              <p className="text-sm mt-1">
-                API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
-                또는 안전한 비밀 저장소를 사용하세요.
-              </p>
+          <div className="space-y-6 relative">
+            {/* 배경 장식 */}
+            <div className="absolute inset-0 -z-10">
+              <div className="w-72 h-72 bg-blue-400/10 rounded-full blur-3xl top-0 left-1/3 absolute animate-pulse"></div>
+              <div className="w-56 h-56 bg-emerald-400/10 rounded-full blur-2xl bottom-0 right-1/4 absolute animate-pulse"></div>
             </div>
-            <h1 className={`text-3xl font-bold ${textPrimary}`}>
+
+            {/* 섹션 타이틀 */}
+            <h1
+              className={`text-3xl lg:text-4xl font-bold transition-colors ${textPrimary}`}
+            >
               업비트 API 연동
             </h1>
-            <ol className={`${textSecondary} list-decimal ml-6 space-y-3`}>
-              <li>업비트 계정 로그인 후 API 관리 페이지 접속</li>
-              <li>API Key 생성, 권한 및 IP 제한 설정</li>
-              <li>TradingGear 차트에 Key 입력</li>
+
+            {/* 단계 요약 리스트 카드화 */}
+            <ol className="space-y-4">
+              {[
+                "바이낸스 계정 로그인 후 API 관리 페이지 접속",
+                "새 API 키 생성, IP 제한 설정",
+                "TradingGear 차트에서 API 입력란에 Key와 Secret 입력",
+                "테스트용 샌드박스 연결 확인",
+              ].map((step, idx) => (
+                <li
+                  key={idx}
+                  className={`p-4 rounded-2xl border transition-all duration-300 flex items-center gap-3
+          ${
+            theme === "dark"
+              ? "bg-slate-950/80 border-slate-700/50 shadow-sm hover:shadow-cyan-400/20 text-slate-200 hover:-translate-y-1"
+              : "bg-white border-blue-200/40 shadow-sm hover:shadow-blue-400/20 text-slate-900 hover:-translate-y-1"
+          }`}
+                >
+                  <span className="text-xl">{idx + 1}.</span>
+                  <p className="text-sm lg:text-base">{step}</p>
+                </li>
+              ))}
             </ol>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <img
-                src="/docs/upbit1.png"
-                alt="업비트 API 1"
-                className="rounded-lg border"
-              />
+
+            {/* 보안 안내 배너 */}
+            <div
+              className={`mb-6 rounded-xl p-6 border-l-4 flex items-start gap-4 transition-all duration-300
+      ${
+        theme === "dark"
+          ? "bg-gradient-to-r from-slate-950/80 to-slate-900/80 border-cyan-400/50 shadow-md text-slate-200"
+          : "bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-400 shadow-md text-slate-900"
+      }`}
+            >
+              <div className="text-2xl mt-1">🔒</div>
+              <div>
+                <p className="font-semibold text-lg">보안 안내</p>
+                <p className="mt-1 text-sm leading-relaxed">
+                  API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
+                  또는 안전한 비밀 저장소에 보관하세요.
+                </p>
+              </div>
             </div>
+
+            {/* 실제 단계별 상세 가이드 */}
+            <BinanceGuide />
           </div>
         );
 
       case "bithumb":
         return (
-          <div className="space-y-6">
-            {/* 항상 보여줄 공통 보안 배너 */}
-            <div
-              className={`mb-6 rounded-lg border-l-4 p-4 ${
-                theme === "dark"
-                  ? "bg-slate-800 border-cyan-400/50 text-slate-200"
-                  : "bg-yellow-50 border-yellow-400 text-slate-800"
-              }`}
-            >
-              <p className="font-semibold">🔒 보안 안내</p>
-              <p className="text-sm mt-1">
-                API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
-                또는 안전한 비밀 저장소를 사용하세요.
-              </p>
+          <div className="space-y-6 relative">
+            {/* 배경 장식 */}
+            <div className="absolute inset-0 -z-10">
+              <div className="w-72 h-72 bg-blue-400/10 rounded-full blur-3xl top-0 left-1/3 absolute animate-pulse"></div>
+              <div className="w-56 h-56 bg-emerald-400/10 rounded-full blur-2xl bottom-0 right-1/4 absolute animate-pulse"></div>
             </div>
-            <h1 className={`text-3xl font-bold ${textPrimary}`}>
+
+            {/* 섹션 타이틀 */}
+            <h1
+              className={`text-3xl lg:text-4xl font-bold transition-colors ${textPrimary}`}
+            >
               빗썸 API 연동
             </h1>
-            <ol className={`${textSecondary} list-decimal ml-6 space-y-3`}>
-              <li>빗썸 계정 로그인 후 API 관리 페이지 접속</li>
-              <li>API Key 생성, 권한 및 IP 제한 설정</li>
-              <li>TradingGear 차트에 Key 입력</li>
+
+            {/* 단계 요약 리스트 카드화 */}
+            <ol className="space-y-4">
+              {[
+                "바이낸스 계정 로그인 후 API 관리 페이지 접속",
+                "새 API 키 생성, IP 제한 설정",
+                "TradingGear 차트에서 API 입력란에 Key와 Secret 입력",
+                "테스트용 샌드박스 연결 확인",
+              ].map((step, idx) => (
+                <li
+                  key={idx}
+                  className={`p-4 rounded-2xl border transition-all duration-300 flex items-center gap-3
+          ${
+            theme === "dark"
+              ? "bg-slate-950/80 border-slate-700/50 shadow-sm hover:shadow-cyan-400/20 text-slate-200 hover:-translate-y-1"
+              : "bg-white border-blue-200/40 shadow-sm hover:shadow-blue-400/20 text-slate-900 hover:-translate-y-1"
+          }`}
+                >
+                  <span className="text-xl">{idx + 1}.</span>
+                  <p className="text-sm lg:text-base">{step}</p>
+                </li>
+              ))}
             </ol>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <img
-                src="/docs/bithumb1.png"
-                alt="빗썸 API 1"
-                className="rounded-lg border"
-              />
+
+            {/* 보안 안내 배너 */}
+            <div
+              className={`mb-6 rounded-xl p-6 border-l-4 flex items-start gap-4 transition-all duration-300
+      ${
+        theme === "dark"
+          ? "bg-gradient-to-r from-slate-950/80 to-slate-900/80 border-cyan-400/50 shadow-md text-slate-200"
+          : "bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-400 shadow-md text-slate-900"
+      }`}
+            >
+              <div className="text-2xl mt-1">🔒</div>
+              <div>
+                <p className="font-semibold text-lg">보안 안내</p>
+                <p className="mt-1 text-sm leading-relaxed">
+                  API Key는 절대 서버에 저장하지 마세요. 반드시 로컬 환경(.env)
+                  또는 안전한 비밀 저장소에 보관하세요.
+                </p>
+              </div>
             </div>
+
+            {/* 실제 단계별 상세 가이드 */}
+            <BinanceGuide />
           </div>
         );
 
@@ -385,35 +539,44 @@ createBot();`}
 
       case "faq":
         return (
-          <div className="space-y-8">
-            <h1 className={`text-3xl font-bold ${textPrimary}`}>FAQ</h1>
+          <div className="space-y-8 relative">
+            <h1
+              className={`text-3xl font-bold transition-colors ${textPrimary}`}
+            >
+              FAQ
+            </h1>
+            <p className={`${textSecondary}`}>자주 묻는 질문을 찾아보세요.</p>
             <div className="space-y-4">
-              <div
-                className={`border-l-4 ${
-                  theme === "dark" ? "border-cyan-400" : "border-blue-600"
-                } pl-4`}
-              >
-                <h3 className={`font-semibold ${textPrimary}`}>
-                  Q. API 키는 어떻게 생성하나요?
-                </h3>
-                <p className={`${textSecondary} text-sm`}>
-                  대시보드에서 새 API 키를 생성하고 필요한 권한과 IP 제한을
-                  설정하세요.
-                </p>
-              </div>
-              <div
-                className={`border-l-4 ${
-                  theme === "dark" ? "border-cyan-400" : "border-blue-600"
-                } pl-4`}
-              >
-                <h3 className={`font-semibold ${textPrimary}`}>
-                  Q. API Key를 서버에 저장해도 되나요?
-                </h3>
-                <p className={`${textSecondary} text-sm`}>
-                  권장하지 않습니다. 반드시 로컬 환경이나 안전한 파일에만
-                  저장하세요.
-                </p>
-              </div>
+              {[
+                {
+                  q: "API 키는 어떻게 생성하나요?",
+                  a: "대시보드에서 새 API 키를 생성하고 필요한 권한과 IP 제한을 설정하세요.",
+                },
+                {
+                  q: "API Key를 서버에 저장해도 되나요?",
+                  a: "권장하지 않습니다. 반드시 로컬 환경이나 안전한 파일에만 저장하세요.",
+                },
+              ].map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-xl transition-all duration-300 border flex flex-col gap-2
+          ${
+            theme === "dark"
+              ? "bg-slate-950/80 border-slate-700/50 shadow-sm hover:shadow-cyan-400/20 hover:-translate-y-1 text-slate-200"
+              : "bg-white border-blue-200/40 shadow-sm hover:shadow-blue-400/20 hover:-translate-y-1 text-slate-900"
+          }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-cyan-400 dark:text-emerald-400 font-bold">
+                      Q{idx + 1}.
+                    </span>
+                    <h3 className="font-semibold text-lg">{item.q}</h3>
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-300">
+                    {item.a}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         );

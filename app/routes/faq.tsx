@@ -51,7 +51,7 @@ export default function FAQPage() {
     },
     {
       q: "모바일 앱도 지원하나요?",
-      a: "모바일 뷰어 앱을 제공하며, PC 레이아웃과 연동됩니다.",
+      a: "모바일 뷰어 앱을 제공하며, PC 레이아웃과 연동됩니다. 차트 프로그램은 pc 전용입니다.",
       category: "general",
     },
     {
