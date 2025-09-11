@@ -1,0 +1,3288 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>TradingGear — SuperChart-like</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script
+      src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
+      crossorigin="anonymous"
+    ></script>
+    <style>
+      /* Dark */
+      :root {
+        --bg: #0b1020;
+        --panel: #0e1430;
+        --panel2: #101633;
+        --line: #2b3a78;
+        --text: #e7eaf3;
+        --muted: #90a0c5;
+        --accent: #8ab4ff;
+        --buy: #2dd4bf;
+        --sell: #f87171;
+        --warn: #ffd166;
+        --ob-bull: #34d399;
+        --ob-bear: #f87171;
+      }
+      /* Light */
+      :root[data-theme="light"] {
+        --bg: #ffffff;
+        --panel: #f7f8fb;
+        --panel2: #eef1f8;
+        --line: #d5dae7;
+        --text: #0c111a;
+        --muted: #66708a;
+        --accent: #2f6fed;
+        --buy: #10b981;
+        --sell: #ef4444;
+        --warn: #b45309;
+        --ob-bull: #10b981;
+        --ob-bear: #ef4444;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+      header {
+        padding: 8px 10px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: var(--panel2);
+        border-bottom: 1px solid var(--line);
+        flex-wrap: wrap;
+      }
+      .group {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 6px;
+      }
+      header input,
+      header select,
+      header button {
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 8px;
+      }
+      header button {
+        cursor: pointer;
+      }
+      .sep {
+        flex: 1;
+      }
+      .tag {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .hud {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 8px 12px;
+        background: var(--panel);
+        border-bottom: 1px dashed var(--line);
+      }
+      .hud .card {
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 6px 10px;
+        min-width: 120px;
+      }
+      .charts {
+        display: grid;
+        grid-template-rows: 2.5fr 1fr;
+        gap: 4px;
+        flex: 1;
+        position: relative;
+      }
+      .pane {
+        position: relative;
+      }
+      .pane .chart {
+        position: absolute;
+        inset: 0;
+      }
+      .pane canvas.overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 9;
+      }
+      .footer {
+        padding: 6px 12px;
+        font-size: 12px;
+        color: var(--muted);
+        background: var(--panel);
+        border-top: 1px solid var(--line);
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .toolbtn {
+        border: none;
+        background: transparent;
+        padding: 4px 8px;
+        border-radius: 8px;
+        color: var(--text);
+      }
+      .toolbtn.active {
+        background: var(--panel2);
+        border: 1px solid var(--line);
+      }
+      .small {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .kbd {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        padding: 0 6px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel2);
+        color: var(--text);
+      }
+      .pill {
+        padding: 2px 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- Top Bar -->
+      <header>
+        <div class="group">
+          <label
+            >심볼 <input id="symbol" value="SOLUSDT" style="width: 120px"
+          /></label>
+          <label
+            >인터벌
+            <select id="interval">
+              <option>1m</option>
+              <option>3m</option>
+              <option>5m</option>
+              <option selected>15m</option>
+              <option>1h</option>
+              <option>4h</option>
+              <option>1d</option>
+            </select>
+          </label>
+          <button id="loadBtn">불러오기</button>
+          <button id="runStratBtn">전략계산</button>
+        </div>
+
+        <div class="group">
+          <label class="small"
+            ><input type="checkbox" id="showVWAP" checked /> VWAP</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showTEMA" checked /> TEMA(30)</label
+          >
+          
+          <label class="small"><input type="checkbox" id="showMA" checked /> MA(20)</label>
+          <label class="small"><input type="checkbox" id="showEMA" checked /> EMA(50)</label>
+          <label class="small"><input type="checkbox" id="showATR" checked /> ATR(14)</label>
+          <label class="small"><input type="checkbox" id="showSTOCH" checked /> Stoch(14,3,3)</label>
+<label class="small"
+            ><input type="checkbox" id="showOB" checked /> OB(초록/빨강)</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showVOL" checked /> Vol</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showRSI" checked /> RSI(14)</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showCVD" checked /> CVD</label
+          >
+        </div>
+
+        <div class="group">
+          <button class="toolbtn" data-tool="cursor">커서</button>
+          <button class="toolbtn" data-tool="trend">트렌드</button>
+          <button class="toolbtn" data-tool="hline">수평선</button>
+          <button class="toolbtn" data-tool="rect">박스</button>
+          <button class="toolbtn" data-tool="ruler">룰러</button>
+          <button class="toolbtn" id="magnetBtn">자석 OFF</button>
+          <button class="toolbtn" id="delBtn">삭제(Del)</button>
+          <button class="toolbtn" id="undoBtn">↶</button>
+          <button class="toolbtn" id="redoBtn">↷</button>
+        </div>
+
+        <div class="group">
+          <button class="toolbtn" id="autoBtn">오토스케일</button>
+          <button class="toolbtn" id="logBtn">로그 OFF</button>
+          <button class="toolbtn" id="themeBtn">라이트/다크</button>
+          <button class="toolbtn" id="fullBtn">풀스크린</button>
+          <button class="toolbtn" id="csvBtn">CSV</button>
+          <button class="toolbtn" id="pngBtn">PNG(β)</button>
+        </div>
+
+        <div class="group">
+          <label
+            >비교
+            <input id="cmpSymbol" placeholder="BTCUSDT" style="width: 120px"
+          /></label>
+          <button id="cmpBtn">추가/갱신</button>
+          <span class="small">기준=100</span>
+        </div>
+
+        <div class="group">
+          <label class="small"
+            >바수
+            <input type="range" id="rangeBars" min="50" max="500" value="300"
+          /></label>
+          <label class="small"
+            >시작
+            <input type="range" id="rangeStart" min="0" max="200" value="0"
+          /></label>
+          <button id="playBtn">▶ 재생</button>
+          <span class="small">KST <span id="nowKST"></span></span>
+        </div>
+
+        <span class="sep"></span>
+        <span class="tag">SuperChart-like</span>
+      </header>
+
+      <!-- HUD -->
+      <div class="hud" id="hud">
+        <div class="card">
+          <div>가격</div>
+          <div id="hud_price">-</div>
+        </div>
+        <div class="card">
+          <div>VWAP</div>
+          <div id="hud_vwap">-</div>
+        </div>
+        <div class="card">
+          <div>TEMA(30)</div>
+          <div id="hud_tema">-</div>
+        </div>
+        <div class="card">
+          <div>ATR(14)</div>
+          <div id="hud_atr">-</div>
+        </div>
+        <div class="card">
+          <div>ATR%</div>
+          <div id="hud_atrp">-</div>
+        </div>
+        <div class="card">
+          <div>CVD</div>
+          <div id="hud_cvd">-</div>
+        </div>
+        <div class="card">
+          <div>RSI(14)</div>
+          <div id="hud_rsi">-</div>
+        </div>
+        <div class="card">
+          <div>VOL</div>
+          <div id="hud_vol">-</div>
+        </div>
+        <div class="card">
+          <div>Trend</div>
+          <div id="hud_trend">-</div>
+        </div>
+        <div class="card">
+          <div>Cross</div>
+          <div id="hud_data">-</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts">
+        <div class="pane" id="paneMain">
+          <div class="chart" id="chartMain"></div>
+          <canvas class="overlay" id="overlayMain"></canvas>
+        </div>
+        <div class="pane" id="paneSub">
+          <div class="chart" id="chartSub"></div>
+          <canvas class="overlay" id="overlaySub"></canvas>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span
+          >OB 박스:
+          <span class="pill" style="color: var(--buy)">초록=매수</span>,
+          <span class="pill" style="color: var(--sell)">빨강=매도</span>
+          (테두리)</span
+        >
+        <span class="small"
+          >단축키: <span class="kbd">1</span>커서
+          <span class="kbd">2</span>트렌드 <span class="kbd">3</span>수평선
+          <span class="kbd">4</span>박스 <span class="kbd">R</span>룰러
+          <span class="kbd">Del</span>삭제
+          <span class="kbd">Ctrl+Z/Y</span> 되/다</span
+        >
+      </div>
+    </div>
+
+    <script>
+      /* ===== Utils ===== */
+      const api = (p) => p;
+      const $ = (id) => document.getElementById(id);
+      const css = (name) =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue(name)
+          .trim();
+      const DPR = () => window.devicePixelRatio || 1;
+      const fmt = (n, d = 2) =>
+        n == null || isNaN(n) ? "-" : Number(n).toFixed(d);
+      const nowKST = () =>
+        new Date(Date.now() + 9 * 3600 * 1000)
+          .toISOString()
+          .replace("T", " ")
+          .slice(0, 19);
+
+      /* ===== Global ===== */
+      let mainChart,
+        subChart,
+        candleSeries,
+        vwapSeries,
+        temaSeries,
+        volSeries,
+        rsiSeries,
+        cvdSeries,
+        cmpSeries;
+      let maSeries, emaSeries, atrSeries, stochKSeries, stochDSeries;
+      let maArr = [], emaArr = [], atrArr = [], stochK = [], stochD = [];
+      let lastKs = [],
+        vwapArr = [],
+        temaArr = [],
+        rsiArr = [],
+        cvdArr = [],
+        cmpData = [];
+      let zones = [];
+      let tool = "cursor",
+        magnet = false,
+        selectedId = null;
+      let drawings = [];
+      let draft = null;
+      let dragging = false;
+      let dragId = null;
+      let dragAnchor = null;
+      let undoStack = [],
+        redoStack = [];
+      let playing = false,
+        replayTimer = null;
+
+      /* ===== Indicators ===== */
+      const EMA = (arr, L) => {
+        const k = 2 / (L + 1);
+        let p = null;
+        return arr.map((x) => (p = p === null ? x : x * k + p * (1 - k)));
+      };
+      const TEMA = (cl, L) => {
+        const e1 = EMA(cl, L),
+          e2 = EMA(e1, L),
+          e3 = EMA(e2, L);
+        return e1.map((_, i) => 3 * e1[i] - 3 * e2[i] + e3[i]);
+      };
+      const VWAP = (ks) => {
+        let cpv = 0,
+          cv = 0;
+        return ks.map((k) => {
+          const tp = (k.h + k.l + k.c) / 3;
+          cpv += tp * k.v;
+          cv += k.v;
+          return cv ? cpv / cv : tp;
+        });
+      };
+      // Added: SMA / ATR / Stochastic
+      const SMA = (arr, L) => {
+        let sum=0; const out=Array(arr.length).fill(null);
+        for(let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=L) sum-=arr[i-L]; if(i>=L-1) out[i]=sum/L; }
+        return out;
+      };
+      const ATR = (ks, L=14) => {
+        const out=Array(ks.length).fill(null); let prevClose=null, acc=0, q=[];
+        const tr=ks.map(k=>{ const t=prevClose==null? (k.h-k.l):Math.max(k.h-k.l, Math.abs(k.h-prevClose), Math.abs(k.l-prevClose)); prevClose=k.c; return t; });
+        for(let i=0;i<tr.length;i++){ q.push(tr[i]); acc+=tr[i]; if(i>=L){ acc-=q.shift(); } if(i>=L-1) out[i]=acc/L; } return out;
+      };
+      const Stochastic = (ks, L=14, K=3, D=3) => {
+        const kRaw=Array(ks.length).fill(null);
+        for(let i=0;i<ks.length;i++){
+          const from=Math.max(0,i-L+1); let hi=-Infinity, lo=Infinity;
+          for(let j=from;j<=i;j++){ if(ks[j].h>hi) hi=ks[j].h; if(ks[j].l<lo) lo=ks[j].l; }
+          if(i>=L-1){ const den=hi-lo; kRaw[i]=den===0?50:((ks[i].c-lo)/den)*100; }
+        }
+        const kSmooth = SMA(kRaw.map(x=>x??0), K).map((v,i)=>kRaw[i]==null?null:v);
+        const dArr    = SMA(kSmooth.map(x=>x??0), D).map((v,i)=>kSmooth[i]==null?null:v);
+        return { k:kSmooth, d:dArr };
+      };
+      function RSI(cl, L = 14) {
+        let g = 0,
+          l = 0;
+        const out = Array(cl.length).fill(null);
+        for (let i = 1; i < cl.length; i++) {
+          const ch = cl[i] - cl[i - 1];
+          if (i <= L) {
+            if (ch > 0) g += ch;
+            else l -= ch;
+            if (i === L) {
+              const rs = g / (l || 1e-9);
+              out[i] = 100 - 100 / (1 + rs);
+            }
+          } else {
+            const up = Math.max(0, ch),
+              dn = Math.max(0, -ch);
+            g = (g * (L - 1) + up) / L;
+            l = (l * (L - 1) + dn) / L;
+            const rs = g / (l || 1e-9);
+            out[i] = 100 - 100 / (1 + rs);
+          }
+        }
+        return out;
+      }
+      function CVD(ks) {
+        let s = 0;
+        return ks.map((k) => {
+          if (k.c > k.o) s += k.v;
+          else if (k.c < k.o) s -= k.v;
+          return s;
+        });
+      }
+
+      /* ===== Chart Build ===== */
+      function buildCharts() {
+        const m = $("chartMain"),
+          s = $("chartSub"),
+          ovM = $("overlayMain"),
+          ovS = $("overlaySub");
+        mainChart = LightweightCharts.createChart(m, {
+          width: m.clientWidth,
+          height: m.clientHeight,
+          layout: {
+            background: { type: "solid", color: css("--bg") },
+            textColor: css("--text"),
+          },
+          grid: {
+            vertLines: { color: css("--line") },
+            horzLines: { color: css("--line") },
+          },
+          timeScale: {
+            borderColor: css("--line"),
+            timeVisible: true,
+            secondsVisible: false,
+          },
+          rightPriceScale: { borderColor: css("--line") },
+          crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        });
+        subChart = LightweightCharts.createChart(s, {
+          width: s.clientWidth,
+          height: s.clientHeight,
+          layout: {
+            background: { type: "solid", color: css("--bg") },
+            textColor: css("--text"),
+          },
+          grid: {
+            vertLines: { color: css("--line") },
+            horzLines: { color: css("--line") },
+          },
+          timeScale: {
+            borderColor: css("--line"),
+            timeVisible: true,
+            secondsVisible: false,
+          },
+          rightPriceScale: { borderColor: css("--line") },
+          crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        });
+
+        
+        
+        candleSeries = mainChart.addCandlestickSeries({
+          upColor: css("--buy"),
+          downColor: css("--sell"),
+          borderUpColor: css("--buy"),
+          borderDownColor: css("--sell"),
+          wickUpColor: css("--buy"),
+          wickDownColor: css("--sell"),
+        });
+        vwapSeries = mainChart.addLineSeries({
+          color: css("--accent"),
+          lineWidth: 1,
+          priceScaleId: "right",
+          visible: $("showVWAP").checked,
+        });
+        temaSeries = mainChart.addLineSeries({
+          color: css("--warn"),
+          lineWidth: 1,
+          priceScaleId: "right",
+          visible: $("showTEMA").checked,
+        });
+        maSeries   = mainChart.addLineSeries({
+          lineWidth: 1,
+          priceScaleId: "right",
+          visible: $("showMA")?.checked ?? false,
+        });
+        emaSeries  = mainChart.addLineSeries({
+          lineWidth: 1,
+          priceScaleId: "right",
+          visible: $("showEMA")?.checked ?? false,
+        });
+
+        // Sub-chart series
+// Sub-chart series
+        
+        
+        volSeries = subChart.addHistogramSeries({
+          color: css("--muted"),
+          priceFormat: { type: "volume" },
+          priceScaleId: "right",
+          visible: $("showVOL").checked,
+        });
+        rsiSeries = subChart.addLineSeries({
+          color: "#d16fff",
+          lineWidth: 1,
+          priceScaleId: "left",
+          visible: $("showRSI").checked,
+        });
+        cvdSeries = subChart.addLineSeries({
+          color: "#34d399",
+          lineWidth: 1,
+          priceScaleId: "left",
+          visible: $("showCVD").checked,
+        });
+        atrSeries = subChart.addLineSeries({
+          lineWidth: 1,
+          priceScaleId: "atr",
+          visible: $("showATR")?.checked ?? false,
+        });
+        stochKSeries = subChart.addLineSeries({
+          lineWidth: 1,
+          priceScaleId: "stoch",
+          visible: $("showSTOCH")?.checked ?? false,
+        });
+        stochDSeries = subChart.addLineSeries({
+          lineWidth: 1,
+          priceScaleId: "stoch",
+          visible: $("showSTOCH")?.checked ?? false,
+        });
+const resize = () => {
+          const d = DPR();
+          [
+            [m, ovM, mainChart],
+            [s, ovS, subChart],
+          ].forEach(([el, ov, chart]) => {
+            const r = el.getBoundingClientRect();
+            chart.applyOptions({ width: r.width, height: r.height });
+            ov.width = Math.max(1, Math.floor(r.width * d));
+            ov.height = Math.max(1, Math.floor(r.height * d));
+            ov.style.width = r.width + "px";
+            ov.style.height = r.height + "px";
+          });
+          drawAll();
+        };
+        new ResizeObserver(resize).observe(m);
+        new ResizeObserver(resize).observe(s);
+
+        // sync panes
+        const sync = (a, b) =>
+          a.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+            if (r) b.timeScale().setVisibleLogicalRange(r);
+          });
+        sync(mainChart, subChart);
+        sync(subChart, mainChart);
+
+        // crosshair HUD
+        mainChart.subscribeCrosshairMove((p) => {
+          if (!p?.time) {
+            $("hud_data").textContent = "-";
+            return;
+          }
+          const idx = lastKs.findIndex((x) => x.t === p.time);
+          if (idx < 0) return;
+          const k = lastKs[idx];
+          $("hud_data").textContent = `t:${k.t} O:${fmt(k.o)} H:${fmt(
+            k.h
+          )} L:${fmt(k.l)} C:${fmt(k.c)}`;
+          $("hud_vol").textContent = fmt(k.v, 0);
+          $("hud_rsi").textContent = fmt(rsiArr[idx] ?? NaN, 2);
+          $("hud_cvd").textContent = fmt(cvdArr[idx] ?? NaN, 0);
+        });
+
+        // overlay draw on scroll/zoom
+        mainChart.timeScale().subscribeVisibleTimeRangeChange(drawAll);
+
+        // mouse events on chart container (NOT overlay)
+        wireMouse(m);
+      }
+
+      /* ===== Coordinate helpers (CSS px) ===== */
+      const timeToCssX = (chart, t) => chart.timeScale().timeToCoordinate(t);
+      const priceToCssY = (series, p) => series.priceToCoordinate(p);
+      const cssToTime = (chart, xCss) =>
+        chart.timeScale().coordinateToTime(xCss);
+      const cssToPrice = (series, yCss) => series.coordinateToPrice(yCss);
+
+      /* ===== OB merge & draw ===== */
+      function mergeZones(zs, { iou = 0.2 } = {}) {
+        if (!zs?.length) return [];
+        const out = [];
+        const area = (z) =>
+          Math.max(0, z.top - z.bottom) * Math.max(0, z.end - z.start);
+        const inter = (a, b) => {
+          const it = Math.min(a.top, b.top),
+            ib = Math.max(a.bottom, b.bottom);
+          const ih = Math.max(0, it - ib);
+          const is = Math.max(a.start, b.start),
+            ie = Math.min(a.end, b.end);
+          const iw = Math.max(0, ie - is);
+          return { ia: iw * ih };
+        };
+        const U = (a, b) => ({
+          type: a.type,
+          start: Math.min(a.start, b.start),
+          end: Math.max(a.end, b.end),
+          top: Math.max(a.top, b.top),
+          bottom: Math.min(a.bottom, b.bottom),
+        });
+        const arr = [...zs];
+        while (arr.length) {
+          let c = arr.shift();
+          for (let i = 0; i < arr.length; i++) {
+            const d = arr[i];
+            if (d.type !== c.type) continue;
+            const { ia } = inter(c, d);
+            const iouVal = ia / Math.max(1e-9, area(c) + area(d) - ia);
+            if (iouVal >= iou) {
+              c = U(c, d);
+              arr.splice(i, 1);
+              i = -1;
+            }
+          }
+          out.push(c);
+        }
+        return out;
+      }
+      
+      function drawZones(ctx) {
+        const obToggle = document.getElementById("showOB");
+        if ((obToggle && !obToggle.checked) || !zones.length) return;
+
+        const d = DPR();
+        const cv = document.getElementById("overlayMain");
+        const bullBorder = css("--ob-bull");
+        const bearBorder = css("--ob-bear");
+
+        // 세로 간격 오프셋(px)
+        const spacing = 6 * d; 
+
+        const list = [...zones].sort((a, b) => a.end - b.end);
+
+        list.forEach((z, idx) => {
+          let x1 = timeToCssX(mainChart, z.start),
+              x2 = timeToCssX(mainChart, z.end);
+          let yTop = priceToCssY(candleSeries, z.top),
+              yBot = priceToCssY(candleSeries, z.bottom);
+
+          if (x1 == null && x2 == null) return;
+          if (x1 == null) x1 = 0;
+          if (x2 == null) x2 = cv.clientWidth;
+          if (yTop == null) yTop = 0;
+          if (yBot == null) yBot = cv.clientHeight;
+
+          x1 *= d; x2 *= d; yTop *= d; yBot *= d;
+
+          // === 간격 적용 ===
+          yTop -= spacing;   // 위로 올림
+          yBot += spacing;   // 아래로 내림
+
+          const L = Math.min(x1, x2),
+                R = Math.max(x1, x2),
+                T = Math.min(yTop, yBot),
+                B = Math.max(yTop, yBot),
+                W = Math.max(1, R - L),
+                H = Math.max(1, B - T);
+
+          const isBull = z.type === "bullish";
+          const border = isBull ? bullBorder : bearBorder;
+
+          // 채우기
+          ctx.save();
+          ctx.fillStyle = isBull ? "rgba(56, 189, 148, 0.18)" : "rgba(244, 63, 94, 0.18)";
+          ctx.fillRect(L, T, W, H);
+          ctx.globalCompositeOperation = "multiply";
+          ctx.fillStyle = "rgba(6, 12, 24, 0.35)";
+          ctx.fillRect(L, T, W, H);
+          ctx.restore();
+
+          // 외곽선
+          ctx.save();
+          ctx.lineWidth = 1.6 * d;
+          ctx.strokeStyle = border;
+          ctx.setLineDash([]);
+          ctx.strokeRect(L + 0.5 * d, T + 0.5 * d, W - 1 * d, H - 1 * d);
+          ctx.restore();
+
+          // 점선(상/하단)
+          ctx.save();
+          ctx.lineWidth = 1.2 * d;
+          ctx.setLineDash([6 * d, 4 * d]);
+          ctx.strokeStyle = "#ffffff66";
+          ctx.beginPath();
+          ctx.moveTo(L + 8 * d, T + 8 * d);
+          ctx.lineTo(R - 8 * d, T + 8 * d);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(L + 8 * d, B - 8 * d);
+          ctx.lineTo(R - 8 * d, B - 8 * d);
+          ctx.stroke();
+          ctx.restore();
+
+          // 우측 중앙 + 버튼
+          const cx = Math.min(R - 10 * d, cv.width - 14 * d);
+          const cy = (T + B) / 2;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, 7 * d, 0, Math.PI * 2);
+          ctx.fillStyle = "#111827";
+          ctx.globalAlpha = 0.9;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = 1.2 * d;
+          ctx.strokeStyle = "#d1d5db";
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx - 3 * d, cy);
+          ctx.lineTo(cx + 3 * d, cy);
+          ctx.moveTo(cx, cy - 3 * d);
+          ctx.lineTo(cx, cy + 3 * d);
+          ctx.strokeStyle = "#e5e7eb";
+          ctx.lineWidth = 1.4 * d;
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+/* ===== Drawings ===== */
+      const genId = () => Math.random().toString(36).slice(2, 9);
+      function setTool(t) {
+        tool = t;
+        document
+          .querySelectorAll(".toolbtn[data-tool]")
+          .forEach((b) => b.classList.toggle("active", b.dataset.tool === t));
+      }
+      function pushUndo() {
+        undoStack.push(JSON.stringify(drawings));
+        if (undoStack.length > 100) undoStack.shift();
+        redoStack.length = 0;
+      }
+      function undo() {
+        if (!undoStack.length) return;
+        redoStack.push(JSON.stringify(drawings));
+        drawings = JSON.parse(undoStack.pop());
+        drawAll();
+      }
+      function redo() {
+        if (!redoStack.length) return;
+        undoStack.push(JSON.stringify(drawings));
+        drawings = JSON.parse(redoStack.pop());
+        drawAll();
+      }
+
+      function nearestOHLC(time, price) {
+        if (!magnet || !lastKs.length) return { t: Math.round(time), p: price };
+        let best = 0;
+        for (let i = 1; i < lastKs.length; i++)
+          if (Math.abs(lastKs[i].t - time) < Math.abs(lastKs[best].t - time))
+            best = i;
+        const k = lastKs[best],
+          cand = [k.o, k.h, k.l, k.c];
+        const p = cand.reduce(
+          (a, b) => (Math.abs(b - price) < Math.abs(a - price) ? b : a),
+          cand[0]
+        );
+        return { t: k.t, p };
+      }
+      function hitTest(xCss, yCss) {
+        for (let i = drawings.length - 1; i >= 0; i--) {
+          const d = drawings[i];
+          if (d.type === "hline") {
+            const y = priceToCssY(candleSeries, d.pts[0].p);
+            if (y == null) continue;
+            if (Math.abs(y - yCss) < 6) return d.id;
+          } else if (d.type === "trend" || d.type === "ruler") {
+            if (d.pts.length < 2) continue;
+            const [a, b] = d.pts;
+            const x1 = timeToCssX(mainChart, a.t),
+              y1 = priceToCssY(candleSeries, a.p);
+            const x2 = timeToCssX(mainChart, b.t),
+              y2 = priceToCssY(candleSeries, b.p);
+            if ([x1, y1, x2, y2].some((v) => v == null)) continue;
+            const A = y2 - y1,
+              B = x1 - x2,
+              C = x2 * y1 - x1 * y2;
+            const dist = Math.abs(A * xCss + B * yCss + C) / Math.hypot(A, B);
+            if (dist < 6) return d.id;
+          } else if (d.type === "rect") {
+            if (d.pts.length < 2) continue;
+            const [a, b] = d.pts;
+            let x1 = timeToCssX(mainChart, a.t),
+              y1 = priceToCssY(candleSeries, a.p);
+            let x2 = timeToCssX(mainChart, b.t),
+              y2 = priceToCssY(candleSeries, b.p);
+            if ([x1, y1, x2, y2].some((v) => v == null)) continue;
+            const L = Math.min(x1, x2),
+              R = Math.max(x1, x2),
+              T = Math.min(y1, y2),
+              B = Math.max(y1, y2);
+            if (xCss >= L && xCss <= R && yCss >= T && yCss <= B) return d.id;
+          }
+        }
+        return null;
+      }
+      function drawDrawings(ctx) {
+        const d = DPR();
+        drawings.forEach((drw) => {
+          const active = drw.id === selectedId;
+          const stroke = active ? css("--warn") : "#c4d0ff";
+          ctx.save();
+          ctx.lineWidth = 2 * d;
+          ctx.strokeStyle = stroke;
+          ctx.fillStyle = "rgba(196,208,255,0.10)";
+          ctx.setLineDash([]);
+          if (drw.type === "hline" && drw.pts[0]) {
+            const y = priceToCssY(candleSeries, drw.pts[0].p);
+            if (y == null) {
+              ctx.restore();
+              return;
+            }
+            ctx.beginPath();
+            ctx.moveTo(0, y * d);
+            ctx.lineTo($("overlayMain").width, y * d);
+            ctx.stroke();
+          } else if (
+            (drw.type === "trend" || drw.type === "ruler") &&
+            drw.pts.length >= 2
+          ) {
+            const [a, b] = drw.pts;
+            const x1 = timeToCssX(mainChart, a.t),
+              y1 = priceToCssY(candleSeries, a.p);
+            const x2 = timeToCssX(mainChart, b.t),
+              y2 = priceToCssY(candleSeries, b.p);
+            if ([x1, y1, x2, y2].some((v) => v == null)) {
+              ctx.restore();
+              return;
+            }
+            ctx.beginPath();
+            ctx.moveTo(x1 * d, y1 * d);
+            ctx.lineTo(x2 * d, y2 * d);
+            if (drw.type === "ruler") {
+              ctx.setLineDash([4 * d, 3 * d]);
+            }
+            ctx.stroke();
+            if (drw.type === "ruler") {
+              const i1 = lastKs.findIndex((k) => k.t === a.t),
+                i2 = lastKs.findIndex((k) => k.t === b.t);
+              if (i1 >= 0 && i2 >= 0) {
+                const dp = b.p - a.p,
+                  pct = (dp / a.p) * 100,
+                  bars = Math.abs(i2 - i1);
+                const tx = ((x1 + x2) / 2) * d,
+                  ty = ((y1 + y2) / 2) * d;
+                const text = `Δ ${fmt(dp)} | ${fmt(pct)}% | ${bars} bars`;
+                ctx.font = `${12 * d}px ui-sans-serif,system-ui`;
+                const w = ctx.measureText(text).width + 8 * d,
+                  h = 16 * d;
+                ctx.fillStyle = "rgba(0,0,0,0.6)";
+                ctx.fillRect(tx - w / 2, ty - h - 6 * d, w, h);
+                ctx.fillStyle = "#fff";
+                ctx.fillText(text, tx - w / 2 + 4 * d, ty - 6 * d);
+              }
+            }
+          } else if (drw.type === "rect" && drw.pts.length >= 2) {
+            const [a, b] = drw.pts;
+            const x1 = timeToCssX(mainChart, a.t),
+              y1 = priceToCssY(candleSeries, a.p);
+            const x2 = timeToCssX(mainChart, b.t),
+              y2 = priceToCssY(candleSeries, b.p);
+            if ([x1, y1, x2, y2].some((v) => v == null)) {
+              ctx.restore();
+              return;
+            }
+            const L = Math.min(x1, x2) * d,
+              R = Math.max(x1, x2) * d,
+              T = Math.min(y1, y2) * d,
+              B = Math.max(y1, y2) * d;
+            ctx.beginPath();
+            ctx.rect(L, T, R - L, B - T);
+            ctx.stroke();
+          }
+          ctx.restore();
+        });
+      }
+
+      /* ===== Mouse wiring on chart container ===== */
+      function getPointerCss(e, targetEl) {
+        const r = targetEl.getBoundingClientRect();
+        const xCss = e.clientX - r.left;
+        const yCss = e.clientY - r.top;
+        return { xCss, yCss, rect: r };
+      }
+      function wireMouse(container) {
+        container.addEventListener("mousedown", (e) => {
+          const { xCss, yCss } = getPointerCss(e, container);
+          const t = cssToTime(mainChart, xCss),
+            p = cssToPrice(candleSeries, yCss);
+          if (t == null || p == null) return;
+
+          if (tool === "cursor") {
+            const id = hitTest(xCss, yCss);
+            selectedId = id;
+            dragging = !!id;
+            dragId = id;
+            if (id) {
+              // anchor 저장
+              dragAnchor = { xCss, yCss };
+            }
+            drawAll();
+            return;
+          }
+
+          // new drawing
+          pushUndo();
+          if (tool === "hline") {
+            const { t: tt, p: pp } = nearestOHLC(t, p);
+            draft = {
+              id: genId(),
+              type: "hline",
+              pts: [{ t: Math.round(tt), p: pp }],
+            };
+            drawings.push(draft);
+            selectedId = draft.id;
+            drawAll();
+          } else if (["trend", "rect", "ruler"].includes(tool)) {
+            const { t: tt, p: pp } = nearestOHLC(t, p);
+            draft = {
+              id: genId(),
+              type: tool,
+              pts: [{ t: Math.round(tt), p: pp }],
+            };
+            drawings.push(draft);
+            selectedId = draft.id;
+            drawAll();
+          }
+        });
+
+        container.addEventListener("mousemove", (e) => {
+          const { xCss, yCss } = getPointerCss(e, container);
+          const t = cssToTime(mainChart, xCss),
+            p = cssToPrice(candleSeries, yCss);
+          if (t == null || p == null) return;
+
+          if (dragging && dragId) {
+            const d = drawings.find((x) => x.id === dragId);
+            if (!d) return;
+            const dx = xCss - dragAnchor.xCss;
+            const dy = yCss - dragAnchor.yCss;
+            dragAnchor = { xCss, yCss };
+            // 모든 포인트를 CSS px에서 이동 후 좌표 변환
+            d.pts = d.pts.map((pt) => {
+              const px = timeToCssX(mainChart, pt.t) + dx;
+              const py = priceToCssY(candleSeries, pt.p) + dy;
+              const nt = cssToTime(mainChart, px);
+              const np = cssToPrice(candleSeries, py);
+              return { t: Math.round(nt ?? pt.t), p: np ?? pt.p };
+            });
+            drawAll();
+            return;
+          }
+
+          if (draft) {
+            const { t: tt, p: pp } = nearestOHLC(t, p);
+            if (draft.pts.length === 1)
+              draft.pts.push({ t: Math.round(tt), p: pp });
+            else draft.pts[draft.pts.length - 1] = { t: Math.round(tt), p: pp };
+            drawAll();
+          }
+        });
+
+        window.addEventListener("mouseup", () => {
+          dragging = false;
+          dragId = null;
+          dragAnchor = null;
+          draft = null;
+        });
+      }
+
+      /* ===== Zones fetch/merge ===== */
+      async function refreshZones({ forceServer = false } = {}) {
+        const symbol = $("symbol").value.trim().toUpperCase();
+        const interval = $("interval").value;
+        if (!$("showOB").checked) {
+          zones = [];
+          drawAll();
+          return;
+        }
+        let srv = [];
+        if (forceServer) {
+          try {
+            const z = await fetch(
+              api(
+                `/api/zones/ob?symbol=${symbol}&interval=${interval}&lookback=500&extend=150&debug=true`
+              )
+            ).then((r) => r.json());
+            srv = Array.isArray(z.zones) ? z.zones : [];
+          } catch {}
+        }
+        if (srv.length) {
+          zones = srv;
+        } else if (lastKs.length) {
+          // fallback
+          const out = [];
+          const start = Math.max(1, lastKs.length - 800);
+          for (let i = start; i < lastKs.length - 1; i++) {
+            const b = lastKs[i],
+              fut = lastKs.slice(i + 1, Math.min(i + 151, lastKs.length));
+            if (!fut.length) continue;
+            const top = Math.max(b.o, b.c, b.h),
+              bottom = Math.min(b.o, b.c, b.l);
+            if (b.c < b.o && fut.some((x) => x.h >= b.h))
+              out.push({
+                type: "bullish",
+                start: b.t,
+                end: lastKs.at(-1).t,
+                top,
+                bottom,
+              });
+            if (b.c > b.o && fut.some((x) => x.l <= b.l))
+              out.push({
+                type: "bearish",
+                start: b.t,
+                end: lastKs.at(-1).t,
+                top,
+                bottom,
+              });
+          }
+          zones = out.slice(-20);
+        }
+        zones = mergeZones(zones, { iou: 0.2 });
+        drawAll();
+      }
+
+      /* ===== Load / HUD ===== */
+      
+      // helper: filter only finite values to avoid autoscale distortion
+      function mapFiniteSeries(ks, arr){
+        const out = [];
+        for(let i=0;i<ks.length;i++){
+          const v = arr[i];
+          if(Number.isFinite(v)) out.push({ time: ks[i].t, value: v });
+        }
+        return out;
+      }
+    function reapplyStochAtr(){
+      try{
+        if (!window.subChart) return;
+        if (atrSeries && Array.isArray(atrArr) && lastKs?.length) {
+          atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
+        }
+        if (stochKSeries && Array.isArray(stochK) && lastKs?.length) {
+          stochKSeries.setData(mapFiniteSeries(lastKs, stochK));
+        }
+        if (stochDSeries && Array.isArray(stochD) && lastKs?.length) {
+          stochDSeries.setData(mapFiniteSeries(lastKs, stochD));
+        }
+        const atrOn = document.getElementById("showATR") ? document.getElementById("showATR").checked : true;
+        const stoOn = document.getElementById("showSTOCH") ? document.getElementById("showSTOCH").checked : true;
+        atrSeries && atrSeries.applyOptions({ visible: atrOn });
+        stochKSeries && stochKSeries.applyOptions({ visible: stoOn });
+        stochDSeries && stochDSeries.applyOptions({ visible: stoOn });
+      }catch(e){ console.warn('[reapplyStochAtr]', e); }
+    }
+    async function loadAll() {
+        const symbol = $("symbol").value.trim().toUpperCase();
+        const interval = $("interval").value;
+
+        lastKs = await fetch(
+          api(`/api/klines?symbol=${symbol}&interval=${interval}&limit=500`)
+        ).then((r) => r.json());
+        candleSeries.setData(
+          lastKs.map((k) => ({
+            time: k.t,
+            open: k.o,
+            high: k.h,
+            low: k.l,
+            close: k.c,
+          }))
+        );
+        mainChart.timeScale().fitContent();
+
+        const closes = lastKs.map((k) => k.c);
+        vwapArr = VWAP(lastKs);
+        temaArr = TEMA(closes, 30);
+        rsiArr = RSI(closes, 14);
+        cvdArr = CVD(lastKs);
+
+        
+        maArr  = SMA(closes, 20);
+        emaArr = EMA(closes, 50);
+        atrArr = ATR(lastKs, 14);
+        const st = Stochastic(lastKs, 14, 3, 3);
+        stochK = st.k; stochD = st.d;vwapSeries.setData(
+          lastKs.map((k, i) => ({ time: k.t, value: vwapArr[i] }))
+        );
+        temaSeries.setData(
+          lastKs.map((k, i) => ({ time: k.t, value: temaArr[i] }))
+        );
+        volSeries.setData(lastKs.map((k) => ({ time: k.t, value: k.v })));
+        rsiSeries.setData(
+          lastKs.map((k, i) => ({ time: k.t, value: rsiArr[i] ?? null }))
+        );
+        cvdSeries.setData(
+          lastKs.map((k, i) => ({ time: k.t, value: cvdArr[i] ?? null }))
+        );
+
+        
+        if (maSeries)   maSeries.setData(mapFiniteSeries(lastKs, maArr));
+        if (emaSeries)  emaSeries.setData(mapFiniteSeries(lastKs, emaArr));
+        if (atrSeries)  atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
+        if (stochKSeries) stochKSeries.setData(mapFiniteSeries(lastKs, stochK));
+        if (stochDSeries) stochDSeries.setData(mapFiniteSeries(lastKs, stochD));
+        vwapSeries.applyOptions({ visible: $("showVWAP").checked });
+        temaSeries.applyOptions({ visible: $("showTEMA").checked });
+        volSeries.applyOptions({ visible: $("showVOL").checked });
+        rsiSeries.applyOptions({ visible: $("showRSI").checked });
+        cvdSeries.applyOptions({ visible: $("showCVD").checked });
+
+        
+        if (maSeries)   maSeries.applyOptions({ visible: $("showMA")?.checked ?? false });
+        if (emaSeries)  emaSeries.applyOptions({ visible: $("showEMA")?.checked ?? false });
+        if (atrSeries)  atrSeries.applyOptions({ visible: $("showATR")?.checked ?? false });
+        if (stochKSeries) stochKSeries.applyOptions({ visible: $("showSTOCH")?.checked ?? false });
+        if (stochDSeries) stochDSeries.applyOptions({ visible: $("showSTOCH")?.checked ?? false });
+        await refreshZones({ forceServer: true });
+        await refreshHUD();
+        if (typeof updateLocalHUD==="function") updateLocalHUD();
+        reapplyStochAtr();
+        drawAll();
+      }
+      async function refreshHUD() {
+        const symbol = $("symbol").value.trim().toUpperCase();
+        const interval = $("interval").value;
+        const h = await fetch(
+          api(`/api/hud?symbol=${symbol}&interval=${interval}&limit=500`)
+        )
+          .then((r) => r.json())
+          .catch(() => null);
+        if (!h) return;
+        $("hud_price").textContent = fmt(h.last_price);
+        $("hud_vwap").textContent = fmt(h.vwap);
+        $("hud_tema").textContent = fmt(h.tema30);
+        $("hud_atr").textContent = fmt(h.atr14);
+        $("hud_atrp").textContent = h.atrp ? fmt(h.atrp * 100, 2) + "%" : "-";
+        $("hud_trend").textContent = h.trend === "up" ? "상승" : "하락";
+        $("hud_cvd").textContent = fmt(h.cvd, 0);
+      }
+
+      /* ===== Compare ===== */
+      async function addCompare() {
+        const sym = $("cmpSymbol").value.trim().toUpperCase();
+        if (!sym) return;
+        const interval = $("interval").value;
+        const ks = await fetch(
+          api(`/api/klines?symbol=${sym}&interval=${interval}&limit=500`)
+        ).then((r) => r.json());
+        if (!ks?.length) return;
+        const base = ks[0].c || 1;
+        cmpData = ks.map((k) => ({ time: k.t, value: (k.c / base) * 100 }));
+        cmpSeries.setData(cmpData);
+        cmpSeries.applyOptions({ visible: true });
+      }
+
+      /* ===== Replay ===== */
+      function applyReplay() {
+        const total = lastKs.length,
+          bars = +$("rangeBars").value,
+          start = +$("rangeStart").value;
+        const from = Math.max(0, start),
+          to = Math.min(total - 1, from + bars);
+        mainChart.timeScale().setVisibleLogicalRange({ from, to });
+      }
+      function playReplay() {
+        if (playing) {
+          clearInterval(replayTimer);
+          playing = false;
+          $("playBtn").textContent = "▶ 재생";
+          return;
+        }
+        playing = true;
+        $("playBtn").textContent = "⏸ 정지";
+        replayTimer = setInterval(() => {
+          const s = +$("rangeStart").value;
+          $("rangeStart").value = Math.min(+$("rangeStart").max, s + 1);
+          applyReplay();
+        }, 500);
+      }
+
+      /* ===== Export ===== */
+      function download(name, text) {
+        const a = document.createElement("a");
+        a.href = "data:text/plain;charset=utf-8," + encodeURIComponent(text);
+        a.download = name;
+        a.click();
+      }
+      function exportCSV() {
+        if (!lastKs.length) return;
+        const rows = ["time,open,high,low,close,volume,vwap,tema30,rsi14,cvd"];
+        for (let i = 0; i < lastKs.length; i++) {
+          const k = lastKs[i];
+          rows.push(
+            [
+              k.t,
+              k.o,
+              k.h,
+              k.l,
+              k.c,
+              k.v,
+              vwapArr[i] ?? "",
+              temaArr[i] ?? "",
+              rsiArr[i] ?? "",
+              cvdArr[i] ?? "",
+            ].join(",")
+          );
+        }
+        download(
+          `chart_${$("symbol").value}_${$("interval").value}.csv`,
+          rows.join("\n")
+        );
+      }
+      function exportPNG() {
+        const base = document.querySelector("#chartMain canvas");
+        const ov = $("overlayMain");
+        if (!base) return;
+        const w = base.width,
+          h = base.height;
+        const out = document.createElement("canvas");
+        out.width = w;
+        out.height = h;
+        const ctx = out.getContext("2d");
+        ctx.drawImage(base, 0, 0);
+        ctx.drawImage(ov, 0, 0);
+        const url = out.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `chart_${$("symbol").value}.png`;
+        a.click();
+      }
+
+      /* ===== Theme ===== */
+      function applyTheme() {
+        const optsBase = {
+          layout: {
+            background: { type: "solid", color: css("--bg") },
+            textColor: css("--text"),
+          },
+          grid: {
+            vertLines: { color: css("--line") },
+            horzLines: { color: css("--line") },
+          },
+          timeScale: { borderColor: css("--line") },
+          rightPriceScale: { borderColor: css("--line") },
+        };
+        mainChart.applyOptions(optsBase);
+        subChart.applyOptions(optsBase);
+        candleSeries.applyOptions({
+          upColor: css("--buy"),
+          downColor: css("--sell"),
+          borderUpColor: css("--buy"),
+          borderDownColor: css("--sell"),
+          wickUpColor: css("--buy"),
+          wickDownColor: css("--sell"),
+        });
+        vwapSeries.applyOptions({ color: css("--accent") });
+        temaSeries.applyOptions({ color: css("--warn") });
+        volSeries.applyOptions({ color: css("--muted") });
+        // CVD / RSI colors stay
+        drawAll();
+      }
+
+      /* ===== Draw-all ===== */
+      function drawAll() {
+        const cv = $("overlayMain"),
+          ctx = cv.getContext("2d");
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        drawZones(ctx);
+        drawDrawings(ctx);
+      }
+
+      /* ===== Events ===== */
+      
+/* ===== indicator HUD helpers (safe-add) ===== */
+function injectIndicatorHUD(){
+  const hud = document.getElementById("hud");
+  if(!hud) return; // if no HUD container, skip
+  const make = (id, label) => {
+    if(document.getElementById(id)) return;
+    const card = document.createElement("div");
+    card.className = "card";
+    const t = document.createElement("div"); t.textContent = label;
+    const v = document.createElement("div"); v.id = id; v.textContent = "-";
+    card.appendChild(t); card.appendChild(v); hud.appendChild(card);
+  };
+  // add-on cards (won't duplicate if already exist)
+  make("hud_ma20",  "MA(20)");
+  make("hud_ema50", "EMA(50)");
+  make("hud_stochK","Stoch %K");
+  make("hud_stochD","Stoch %D");
+}
+function updateLocalHUD(){
+  try{
+    const i = (window.lastKs?.length ?? 0) - 1;
+    if(i < 0) return;
+    const put = (id, val, d=2) => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      if(val==null || !isFinite(val)) el.textContent = "-";
+      else el.textContent = Number(val).toFixed(d);
+    };
+    put("hud_ma20",  window.maArr?.[i]);
+    put("hud_ema50", window.emaArr?.[i]);
+    put("hud_stochK", window.stochK?.[i]);
+    put("hud_stochD", window.stochD?.[i]);
+  }catch(_){}
+}
+window.addEventListener("DOMContentLoaded", async () => {
+        buildCharts();
+
+        document
+          .querySelectorAll(".toolbtn[data-tool]")
+          .forEach((b) =>
+            b.addEventListener("click", () => setTool(b.dataset.tool))
+          );
+        $("magnetBtn").addEventListener("click", () => {
+          magnet = !magnet;
+          $("magnetBtn").textContent = magnet ? "자석 ON" : "자석 OFF";
+        });
+        $("delBtn").addEventListener("click", () => {
+          if (!selectedId) return;
+          pushUndo();
+          drawings = drawings.filter((d) => d.id !== selectedId);
+          selectedId = null;
+          drawAll();
+        });
+        $("undoBtn").addEventListener("click", undo);
+        $("redoBtn").addEventListener("click", redo);
+        $("autoBtn").addEventListener("click", () =>
+          mainChart.timeScale().fitContent()
+        );
+        $("logBtn").addEventListener("click", () => {
+          const mode = candleSeries.priceScale().options().mode;
+          const next =
+            mode === LightweightCharts.PriceScaleMode.Logarithmic
+              ? LightweightCharts.PriceScaleMode.Normal
+              : LightweightCharts.PriceScaleMode.Logarithmic;
+          candleSeries.applyOptions({ priceScale: { mode: next } });
+          $("logBtn").textContent =
+            next === LightweightCharts.PriceScaleMode.Logarithmic
+              ? "로그 ON"
+              : "로그 OFF";
+        });
+        $("themeBtn").addEventListener("click", () => {
+          const root = document.documentElement;
+          root.setAttribute(
+            "data-theme",
+            root.getAttribute("data-theme") === "light" ? "dark" : "light"
+          );
+          applyTheme();
+        });
+        $("fullBtn").addEventListener("click", () => {
+          if (!document.fullscreenElement)
+            document.documentElement.requestFullscreen();
+          else document.exitFullscreen();
+        });
+        $("csvBtn").addEventListener("click", exportCSV);
+        $("pngBtn").addEventListener("click", exportPNG);
+
+        $("showVWAP").addEventListener("change", (e) =>
+          vwapSeries.applyOptions({ visible: e.target.checked })
+        );
+        $("showTEMA").addEventListener("change", (e) =>
+          temaSeries.applyOptions({ visible: e.target.checked })
+        );
+        $("showOB").addEventListener("change", async (e) => {
+          if (e.target.checked) await refreshZones({ forceServer: true });
+          else {
+            zones = [];
+            drawAll();
+          }
+        });
+        $("showVOL").addEventListener("change", (e) =>
+          volSeries.applyOptions({ visible: e.target.checked })
+        );
+        $("showRSI").addEventListener("change", (e) =>
+          rsiSeries.applyOptions({ visible: e.target.checked })
+        );
+        $("showCVD").addEventListener("change", (e) =>
+          cvdSeries.applyOptions({ visible: e.target.checked })
+        );
+
+        
+        $("showMA").addEventListener("change", (e) =>
+          maSeries?.applyOptions({ visible: e.target.checked })
+        );
+        $("showEMA").addEventListener("change", (e) =>
+          emaSeries?.applyOptions({ visible: e.target.checked })
+        );
+        $("showATR").addEventListener("change", (e) =>
+          atrSeries?.applyOptions({ visible: e.target.checked })
+        );
+        $("showSTOCH").addEventListener("change", (e) => {
+          stochKSeries?.applyOptions({ visible: e.target.checked });
+          stochDSeries?.applyOptions({ visible: e.target.checked });
+        });
+$("loadBtn").addEventListener("click", loadAll);
+        $("runStratBtn").addEventListener("click", async () => {
+          const symbol = $("symbol").value.trim().toUpperCase();
+          const interval = $("interval").value;
+          await fetch(
+            api(
+              `/api/strategy/run?symbol=${symbol}&interval=${interval}&limit=500&tema_len=30&atr_len=14&vwap_filter=true&atr_distance_mult=0.0&cooldown_bars=5`
+            ),
+            { method: "POST" }
+          );
+          const sigs = await fetch(
+            api(`/api/signals?symbol=${symbol}&interval=${interval}&limit=200`)
+          )
+            .then((r) => r.json())
+            .catch(() => []);
+          const markers = (sigs || []).map((s) => ({
+            time: s.ts,
+            position: s.side === "LONG" ? "belowBar" : "aboveBar",
+            color: s.side === "LONG" ? css("--buy") : css("--sell"),
+            shape: s.side === "LONG" ? "arrowUp" : "arrowDown",
+            text: s.side,
+          }));
+          candleSeries.setMarkers(markers);
+  await refreshHUD();
+        if (typeof updateLocalHUD==="function") updateLocalHUD();
+}
+);
+
+        $("cmpBtn").addEventListener("click", addCompare);
+        $("rangeBars").addEventListener("input", applyReplay);
+        $("rangeStart").addEventListener("input", applyReplay);
+        $("playBtn").addEventListener("click", playReplay);
+
+        document.addEventListener("change", (e) => {
+          const t = e.target; if (!t || t.tagName !== "INPUT" || t.type !== "checkbox") return;
+          try { reapplyStochAtr(); } catch(_) {}
+        });
+
+        // keyboard
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "Delete" && selectedId) {
+            pushUndo();
+            drawings = drawings.filter((d) => d.id !== selectedId);
+            selectedId = null;
+            drawAll();
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+            e.preventDefault();
+            undo();
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+            e.preventDefault();
+            redo();
+          }
+          if (e.key === "1") setTool("cursor");
+          if (e.key === "2") setTool("trend");
+          if (e.key === "3") setTool("hline");
+          if (e.key === "4") setTool("rect");
+          if (e.key.toLowerCase() === "r") setTool("ruler");
+        });
+
+        setInterval(() => ($("nowKST").textContent = nowKST()), 1000);
+        setInterval(refreshHUD, 115000);
+
+        if (typeof injectIndicatorHUD==="function") injectIndicatorHUD();
+        await loadAll();
+      });
+    </script>
+    <script>
+      // === Cursor tool fix — append-only patch ===
+      (function () {
+        const container = document.getElementById("chartMain");
+
+        // 진행 중 드로잉/드래그/선택 싹 정리
+        function cancelCursorState(removeIncomplete = true) {
+          if (window.draft) {
+            if (removeIncomplete && (!draft.pts || draft.pts.length < 2)) {
+              // 한 점만 찍고 끝난 미완성 도형은 제거
+              window.drawings && drawings.pop();
+            }
+            window.draft = null;
+          }
+          window.dragging = false;
+          window.dragId = null;
+          window.dragAnchor = null;
+          window.selectedId = null;
+
+          // (소유자를 모르면 무시) pointer capture 해제 시도
+          try {
+            // 최근 포인터 id를 저장해둔 경우 우선 해제
+            if (window.__cursorPointerId__ != null) {
+              container?.releasePointerCapture(window.__cursorPointerId__);
+              window.__cursorPointerId__ = null;
+            }
+          } catch (_) {}
+
+          // 바로 화면 갱신
+          if (typeof window.drawAll === "function") drawAll();
+
+          // 커서 힌트(이동/크로스헤어 느낌)
+          container && (container.style.cursor = "crosshair");
+        }
+
+        // 기존 setTool이 있다면 감싸서 "커서"일 때 정리 동작 추가
+        const _setTool = window.setTool;
+        window.setTool = function patchedSetTool(t) {
+          if (typeof _setTool === "function") _setTool(t);
+          if (t === "cursor") cancelCursorState(true);
+        };
+
+        // “커서” 버튼을 눌렀을 때도 강제로 정리 (중복 안전)
+        const cursorBtn = document.querySelector(
+          '.toolbtn[data-tool="cursor"]'
+        );
+        cursorBtn?.addEventListener("click", () => cancelCursorState(true));
+
+        // (선택) 포인터 캡처 id 저장: setPointerCapture 하는 쪽에서 기록
+        // enablePointerTools/그리기 코드 어딘가에 아래 한 줄을 추가해두면 더 깔끔합니다.
+        // container.setPointerCapture(e.pointerId); window.__cursorPointerId__ = e.pointerId;
+      })();
+    </script>
+    <!-- ===== [APPEND-ONLY] TradingView-like Watchlist ===== -->
+    <style id="wl-style">
+      .wl-panel {
+        position: fixed;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 340px;
+        z-index: 10050;
+        background: var(--panel2);
+        border-left: 1px solid var(--line);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+
+        /* 초기 상태: 오른쪽으로 숨김 */
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+      }
+
+      /* 열렸을 때 */
+      .wl-panel.open {
+        transform: translateX(0);
+      }
+      .wl-head,
+      .wl-foot {
+        padding: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      .wl-foot {
+        border-bottom: none;
+        border-top: 1px solid var(--line);
+      }
+      .wl-head h3 {
+        margin: 0;
+        font-size: 14px;
+        line-height: 32px; /* 높이 키워서 버튼 안 겹치게 */
+      }
+      .wl-search {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .wl-search input {
+        flex: 1;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      .wl-search button {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .wl-body {
+        overflow: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .wl-sec {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .wl-sec > header {
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .wl-badge {
+        font-size: 11px;
+        padding: 2px 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+      }
+      .wl-list {
+        display: flex;
+        flex-direction: column;
+      }
+      .wl-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 10px;
+        border-top: 1px solid var(--line);
+        cursor: pointer;
+        background: var(--panel);
+      }
+      .wl-row:first-child {
+        border-top: none;
+      }
+      .wl-sym {
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      .wl-last {
+        opacity: 0.95;
+      }
+      .wl-chg-pos {
+        color: var(--buy);
+      }
+      .wl-chg-neg {
+        color: var(--sell);
+      }
+      .wl-card {
+        margin: 8px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 10px;
+        padding: 8px;
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+      }
+      .wl-card h4 {
+        margin: 0 0 4px 0;
+        font-size: 14px;
+      }
+      /* 햄버거 버튼 */
+      .wl-toggle-btn {
+        position: fixed;
+        right: 10px;
+        top: 10px;
+        z-index: 10100;
+        background: var(--panel2);
+        border: 1px solid var(--line);
+        color: white;
+        border-radius: 4px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+    </style>
+    <button id="wlToggle" class="wl-toggle-btn">☰</button>
+    <aside class="wl-panel" id="wlPanel" aria-label="Watchlist">
+      <div class="wl-head">
+        <h3>Watchlist</h3>
+        <div class="wl-search">
+          <input id="wlInput" placeholder="심볼 (예: BTCUSDT)" />
+          <button id="wlAdd">추가</button>
+        </div>
+      </div>
+
+      <div class="wl-body" id="wlBody">
+        <!-- 섹션들이 JS로 렌더링됩니다 -->
+      </div>
+
+      <div class="wl-foot">
+        <div class="wl-card" id="wlCard">
+          <h4 id="wlCardTitle">—</h4>
+          <div>가격: <b id="wlCardLast">-</b></div>
+          <div>변동: <span id="wlCardChg">-</span></div>
+          <div>
+            VWAP: <span id="wlCardVWAP">-</span> · TEMA(30):
+            <span id="wlCardTEMA">-</span>
+          </div>
+          <div>
+            ATR(14): <span id="wlCardATR">-</span> (<span id="wlCardATRp"
+              >-</span
+            >)
+          </div>
+          <div>
+            CVD: <span id="wlCardCVD">-</span> · Trend:
+            <span id="wlCardTrend">-</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <script>
+      /* ===== Watchlist (append-only) ===== */
+      (function () {
+        // 오른쪽 패널만큼 차트 컨텐츠 패딩 확보
+        const wrapEl = document.querySelector(".wrap");
+        // if (wrapEl) wrapEl.style.paddingRight = "340px";
+
+        const bodyEl = document.getElementById("wlBody");
+        const input = document.getElementById("wlInput");
+        const addBtn = document.getElementById("wlAdd");
+
+        // 기본 섹션 & 항목 (이미지와 동일 라벨)
+        // feed: 'binance' 인 항목만 /api/quotes 에서 실시간 반영
+        const WL = {
+          INDICES: [
+            { sym: "VIX", feed: "manual" },
+            { sym: "DXY", feed: "manual" },
+          ],
+          STOCKS: [
+            { sym: "AAPL", feed: "manual" },
+            { sym: "TSLA", feed: "manual" },
+            { sym: "NFLX", feed: "manual" },
+          ],
+          FUTURES: [
+            // 예시로 암호화폐 선물 심볼을 배치하여 동작 확인 가능
+            { sym: "BTCUSDT", feed: "binance" },
+            { sym: "ETHUSDT", feed: "binance" },
+          ],
+          FOREX: [
+            { sym: "EURUSD", feed: "manual" },
+            { sym: "GBPUSD", feed: "manual" },
+            { sym: "USDJPY", feed: "manual" },
+          ],
+          CUSTOM: [],
+        };
+
+        function secHeader(name) {
+          const h = document.createElement("header");
+          h.innerHTML = `<span>${name}</span><span class="wl-badge">List</span>`;
+          return h;
+        }
+
+        /*function rowEl(item){
+    const el = document.createElement('div');
+    el.className = 'wl-row';
+    el.dataset.sym = item.sym;
+    el.dataset.feed = item.feed || 'manual';
+    el.innerHTML = `
+      <div class="wl-sym">${item.sym}</div>
+      <div class="wl-last">-</div>
+      <div class="wl-chg">-</div>
+    `;
+    // 클릭하면 차트로 로드
+    el.addEventListener('click', async ()=>{
+      const inp = document.getElementById('symbol');
+      if (inp) inp.value = (item.binanceSymbol || item.sym);
+      if (window.loadAll) {
+        await window.loadAll();
+        refreshCard(item.sym);
+      }
+    });
+    return el;
+  }
+  */
+
+        const toggleBtn = document.getElementById("wlToggle");
+        const panel = document.getElementById("wlPanel");
+        const wrap = document.querySelector(".wrap");
+
+        toggleBtn.addEventListener("click", () => {
+          panel.classList.toggle("open");
+
+          if (panel.classList.contains("open")) {
+            wrap.style.paddingRight = panel.offsetWidth + "px"; // 열렸을 때 패딩 확보
+          } else {
+            wrap.style.paddingRight = "0px"; // 닫히면 패딩 제거
+          }
+        });
+
+        function rowEl(item) {
+          const el = document.createElement("div");
+          el.className = "wl-row";
+          el.dataset.sym = item.sym;
+          el.dataset.feed = item.feed || "manual";
+          el.innerHTML = `
+      <div class="wl-sym">${item.sym}</div>
+      <div class="wl-last">-</div>
+      <div class="wl-chg">-</div>
+    `;
+          // 클릭하면 차트로 로드
+          el.addEventListener("click", async () => {
+            const inp = document.getElementById("symbol");
+            if (inp) inp.value = item.binanceSymbol || item.sym;
+            if (window.loadAll) {
+              await window.loadAll();
+              refreshCard(item.sym);
+            }
+          });
+          return el;
+        }
+
+        function render() {
+          bodyEl.innerHTML = "";
+          for (const [name, list] of Object.entries(WL)) {
+            const sec = document.createElement("section");
+            sec.className = "wl-sec";
+            sec.appendChild(secHeader(name));
+            const listEl = document.createElement("div");
+            listEl.className = "wl-list";
+            list.forEach((it) => listEl.appendChild(rowEl(it)));
+            sec.appendChild(listEl);
+            bodyEl.appendChild(sec);
+          }
+        }
+
+        render();
+
+        // 심볼 추가 → CUSTOM 섹션으로
+        addBtn.addEventListener("click", () => {
+          const v = input.value.trim().toUpperCase();
+          if (!v) return;
+          WL.CUSTOM.unshift({
+            sym: v,
+            feed: v.endsWith("USDT") ? "binance" : "manual",
+          });
+          input.value = "";
+          render();
+          pollQuotes(); // 즉시 반영
+        });
+
+        // /api/quotes로 실시간(근접) 갱신
+        async function pollQuotes() {
+          // 현재 화면에 있는 binance 심볼 수집
+          const all = [];
+          for (const arr of Object.values(WL)) {
+            arr.forEach((i) => {
+              if ((i.feed || "manual") === "binance")
+                all.push(i.binanceSymbol || i.sym);
+            });
+          }
+          if (!all.length) return;
+
+          try {
+            const intv = document.getElementById("interval")?.value || "1m";
+            const res = await fetch(
+              `/api/quotes/all?symbols=${encodeURIComponent(
+                all.join(",")
+              )}&interval=${encodeURIComponent(intv)}`
+            ).then((r) => r.json());
+            const map = new Map((res.quotes || []).map((q) => [q.symbol, q]));
+            // DOM 갱신
+            document.querySelectorAll(".wl-row").forEach((row) => {
+              const sym = row.dataset.sym;
+              const feed = row.dataset.feed;
+              const lastEl = row.querySelector(".wl-last");
+              const chgEl = row.querySelector(".wl-chg");
+
+              //if (feed !== 'binance'){ lastEl.textContent='-'; chgEl.textContent='-'; chgEl.className='wl-chg'; return; }
+              if (feed !== "binance") {
+                return;
+              }
+
+              const q = map.get(sym) || map.get((sym || "").toUpperCase());
+              if (!q || q.error) {
+                lastEl.textContent = "-";
+                chgEl.textContent = "-";
+                chgEl.className = "wl-chg";
+              } else {
+                lastEl.textContent = Number(q.last).toFixed(2);
+                const c =
+                  q.chg == null
+                    ? "-"
+                    : q.chg >= 0
+                    ? `+${q.chg.toFixed(2)}%`
+                    : `${q.chg.toFixed(2)}%`;
+                chgEl.textContent = c;
+                chgEl.className =
+                  "wl-chg " + (q.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+              }
+            });
+          } catch (e) {
+            // 네트워크 오류는 무시
+          }
+        }
+
+        // 종목 카드 (하단)
+        async function refreshCard(symOverride) {
+          try {
+            const sym =
+              symOverride ||
+              (document.getElementById("symbol")?.value || "").toUpperCase();
+            const intv = document.getElementById("interval")?.value || "1m";
+            const h = await fetch(
+              `/api/hud?symbol=${sym}&interval=${intv}&limit=500`
+            ).then((r) => r.json());
+            document.getElementById(
+              "wlCardTitle"
+            ).textContent = `${sym} · ${intv}`;
+            document.getElementById("wlCardLast").textContent =
+              h?.last_price != null ? Number(h.last_price).toFixed(4) : "-";
+            const chgText = "-"; // 카드에는 절대 등락률 대신 요약만
+            document.getElementById("wlCardChg").textContent = chgText;
+            document.getElementById("wlCardVWAP").textContent =
+              h?.vwap != null ? Number(h.vwap).toFixed(4) : "-";
+            document.getElementById("wlCardTEMA").textContent =
+              h?.tema30 != null ? Number(h.tema30).toFixed(4) : "-";
+            document.getElementById("wlCardATR").textContent =
+              h?.atr14 != null ? Number(h.atr14).toFixed(4) : "-";
+            document.getElementById("wlCardATRp").textContent =
+              h?.atrp != null ? (h.atrp * 100).toFixed(2) + "%" : "-";
+            document.getElementById("wlCardCVD").textContent =
+              h?.cvd != null ? Number(h.cvd).toFixed(0) : "-";
+            document.getElementById("wlCardTrend").textContent =
+              h?.trend === "up" ? "상승" : "하락";
+          } catch (e) {
+            /* ignore */
+          }
+        }
+
+        // 주기 갱신
+        pollQuotes();
+        refreshCard();
+        setInterval(pollQuotes, 15000);
+        setInterval(refreshCard, 15000);
+      })();
+    </script>
+    <!-- ===== /Watchlist ===== -->
+    <!-- [APPEND-ONLY] Watchlist resizer styles -->
+    <style>
+      /* 좌측 리사이저 (워치리스트 폭 조절) */
+      .wl-resizer {
+        position: absolute;
+        left: -6px;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        cursor: col-resize;
+        z-index: 10051;
+      }
+      .wl-resizer::after {
+        content: "";
+        position: absolute;
+        right: 1px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 2px;
+        height: 48px;
+        background: var(--line);
+        opacity: 0.6;
+        border-radius: 2px;
+      }
+      .wl-panel.resizing {
+        user-select: none;
+      }
+    </style>
+    <script>
+      /* [APPEND-ONLY] Watchlist resizer + crosshair jitter fix */
+      (function () {
+        /* ---------- Watchlist width resizer ---------- */
+        const panel = document.getElementById("wlPanel");
+        const wrap = document.querySelector(".wrap");
+        if (panel && wrap) {
+          // 리사이저 삽입 (좌측)
+          const rz = document.createElement("div");
+          rz.className = "wl-resizer";
+          panel.appendChild(rz);
+
+          const MIN = 220,
+            MAX = 520;
+
+          function setWidth(w) {
+            const width = Math.max(MIN, Math.min(MAX, w | 0));
+            panel.style.width = width + "px";
+            // 컨텐츠가 가려지지 않도록 우측 패딩을 패널폭과 동기화
+            wrap.style.paddingRight = width + "px";
+            localStorage.setItem("wlWidth", String(width));
+          }
+
+          // 이전에 저장된 폭 복원 (이전에 340px로 고정 주입된 게 있다면 여기서 덮어씀)
+          const saved = +localStorage.getItem("wlWidth");
+          // if (saved) setWidth(saved);
+
+          let startX = 0,
+            startW = 0,
+            moving = false;
+          function onMove(e) {
+            if (!moving) return;
+            // 리사이저가 왼쪽에 있으므로 마우스를 왼쪽으로 끌면 폭이 커짐
+            const dx = startX - e.clientX;
+            // setWidth(startW + dx);
+          }
+          function onUp() {
+            moving = false;
+            panel.classList.remove("resizing");
+            document.removeEventListener("mousemove", onMove);
+          }
+          rz.addEventListener("mousedown", (e) => {
+            startX = e.clientX;
+            startW = panel.getBoundingClientRect().width | 0;
+            moving = true;
+            panel.classList.add("resizing");
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp, { once: true });
+            e.preventDefault();
+          });
+
+          // 첫 로드시 기본 폭 주입이 있었다면 최소/최대 범위로 보정
+          if (!saved) {
+            const cur = panel.getBoundingClientRect().width | 0;
+            // setWidth(cur);
+          }
+        }
+
+        /* ---------- Crosshair jitter fixes ---------- */
+        // 1) 포인터 좌표를 차트 영역으로 "클램프"하여 밖으로 나갔을 때 NaN/널 좌표로 인한 흔들림 방지
+        function clamp(v, min, max) {
+          return v < min ? min : v > max ? max : v;
+        }
+        const container = document.getElementById("chartMain");
+        if (container) {
+          // 기존 getPointerCss를 안전하게 덮어씀(append-only)
+          window.getPointerCss = function patchedGetPointerCss(e, targetEl) {
+            const r = (targetEl || container).getBoundingClientRect();
+            const xCss = clamp(e.clientX - r.left, 0, r.width);
+            const yCss = clamp(e.clientY - r.top, 0, r.height);
+            return { xCss, yCss, rect: r };
+          };
+
+          // 2) 차트 밖으로 마우스가 나가면 드래그/드래프트 상태 해제(떨림/유령 드래그 방지)
+          container.addEventListener("mouseleave", () => {
+            // 미완성 드래프트(점 1개짜리)는 제거
+            if (
+              window.draft &&
+              (!window.draft.pts || window.draft.pts.length < 2)
+            ) {
+              try {
+                window.drawings && drawings.pop();
+              } catch (_) {}
+              window.draft = null;
+            }
+            window.dragging = false;
+            window.dragId = null;
+            window.dragAnchor = null;
+            container.style.cursor = "crosshair";
+          });
+        }
+
+        // 3) drawAll을 rAF로 스로틀링해 과도한 리페인트 방지(마우스 이동이 빠를 때 떨림 감소)
+        if (typeof window.drawAll === "function") {
+          const _drawAll = window.drawAll;
+          let pending = false;
+          window.drawAll = function () {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(() => {
+              pending = false;
+              try {
+                _drawAll();
+              } catch (_e) {}
+            });
+          };
+        }
+      })();
+    </script>
+    <!-- [APPEND-ONLY] HUD Cross row & stabilization -->
+    <style id="hud-cross-style">
+      /* Cross 카드: 항상 다음 줄로 */
+      #hud .card.hud-cross-row {
+        flex: 0 0 30%; /* 새 줄로 내려가도록 */
+        order: 1000; /* 마지막에 배치 */
+        margin-top: 4px;
+      }
+      /* Cross 텍스트: 폭 고정 + 탭유라 숫자 + 줄바꿈 금지 */
+      #hud_data {
+        display: inline-block;
+        min-width: 40ch; /* 내용 길이에 관계없이 카드 폭 유지 */
+        white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums; /* 자간이 일정한 숫자 */
+        font-feature-settings: "tnum" 1;
+      }
+    </style>
+    <script>
+      /* [APPEND-ONLY] Move Cross card to its own row */
+      (function () {
+        const cross = document.getElementById("hud_data");
+        if (!cross) return;
+        const card = cross.closest(".card");
+        if (card && !card.classList.contains("hud-cross-row")) {
+          card.classList.add("hud-cross-row");
+        }
+      })();
+    </script>
+    <!-- [APPEND-ONLY] Add SOLUSDT to Watchlist -->
+    <script>
+      (function () {
+        const sym = "SOLUSDT";
+
+        function addSOL() {
+          // 1) 기존 워치리스트 API가 있으면 그것을 우선 사용
+          if (typeof window.wlAdd === "function") {
+            try {
+              window.wlAdd(sym);
+            } catch (_) {}
+            // 새로고침 함수가 있으면 호출
+            if (typeof window.wlRefresh === "function") window.wlRefresh();
+            return;
+          }
+
+          // 2) API가 없으면 DOM에 직접 아이템 주입 (중복 방지 포함)
+          const list = document.getElementById("wlList");
+          if (!list) return;
+
+          const dup = [...list.querySelectorAll("[data-sym]")].some(
+            (li) => (li.dataset.sym || "").toUpperCase() === sym
+          );
+          if (dup) return;
+
+          const li = document.createElement("li");
+          li.className = "wl-item";
+          li.dataset.sym = sym;
+          li.innerHTML = `
+      <div class="left">
+        <span class="sym">${sym}</span><span class="ex">BINANCE</span>
+      </div>
+      <div class="right">
+        <span class="last">-</span><span class="chg">-</span><span class="pct">-</span>
+      </div>`.trim();
+
+          // 클릭 시 차트 심볼 교체 후 로드
+          li.addEventListener("click", () => {
+            const sInp = document.getElementById("symbol");
+            if (sInp) sInp.value = sym;
+            const load = document.getElementById("loadBtn");
+            if (load) load.click();
+          });
+
+          // 맨 위에 추가
+          list.prepend(li);
+
+          // 가격 갱신 핸들러가 있으면 호출
+          if (typeof window.wlRefresh === "function") window.wlRefresh();
+        }
+
+        if (document.readyState !== "loading") addSOL();
+        else document.addEventListener("DOMContentLoaded", addSOL);
+      })();
+    </script>
+    <!-- [APPEND-ONLY] Watchlist: Yahoo quotes + SOLUSDT ensure -->
+    <script>
+      (function () {
+        // --- 야후 심볼 매핑 (친숙심볼 -> 야후심볼은 서버에서 처리하지만, DOM 태깅용으로도 보관)
+        const YF_FRIENDLY = [
+          "VIX",
+          "DXY",
+          "AAPL",
+          "NFLX",
+          "EURUSD",
+          "GBPUSD",
+          "USDJPY",
+        ];
+
+        // 워치리스트 DOM이 렌더된 후에만 패치 적용
+        function whenReady(sel, fn, tries = 60) {
+          const timer = setInterval(() => {
+            const el = document.querySelector(sel);
+            if (el && el.querySelector(".wl-row")) {
+              clearInterval(timer);
+              fn(el);
+            } else if (--tries <= 0) {
+              clearInterval(timer);
+            }
+          }, 100);
+        }
+
+        // 행(.wl-row)을 야후 피드로 태깅
+        function tagYFRows(root) {
+          const rows = root.querySelectorAll(".wl-row");
+          rows.forEach((row) => {
+            const sym = (
+              row.dataset.sym ||
+              row.querySelector(".wl-sym")?.textContent ||
+              ""
+            )
+              .trim()
+              .toUpperCase();
+            if (YF_FRIENDLY.includes(sym)) {
+              row.dataset.feed = "yf";
+            }
+          });
+        }
+
+        // 야후 피드 폴링 -> DOM 갱신
+        async function pollYF() {
+          try {
+            const rows = [
+              ...document.querySelectorAll('.wl-row[data-feed="yf"]'),
+            ];
+            if (!rows.length) return;
+            const list = [
+              ...new Set(
+                rows
+                  .map((r) => (r.dataset.sym || "").toUpperCase())
+                  .filter(Boolean)
+              ),
+            ];
+            if (!list.length) return;
+
+            const res = await fetch(
+              `/api/quotes/yf?symbols=${encodeURIComponent(list.join(","))}`
+            ).then((r) => r.json());
+            const map = new Map(
+              (res.quotes || []).map((q) => [q.symbol.toUpperCase(), q])
+            );
+
+            rows.forEach((row) => {
+              const sym = (row.dataset.sym || "").toUpperCase();
+              const q = map.get(sym);
+              const lastEl = row.querySelector(".wl-last");
+              const chgEl = row.querySelector(".wl-chg");
+              if (!q || q.error) {
+                if (lastEl) lastEl.textContent = "-";
+                if (chgEl) {
+                  chgEl.textContent = "-";
+                  chgEl.className = "wl-chg";
+                }
+                return;
+              }
+              if (lastEl) lastEl.textContent = Number(q.last).toFixed(2);
+              if (chgEl) {
+                const t =
+                  q.chg == null
+                    ? "-"
+                    : q.chg >= 0
+                    ? `+${q.chg.toFixed(2)}%`
+                    : `${q.chg.toFixed(2)}%`;
+                chgEl.textContent = t;
+                chgEl.className =
+                  "wl-chg " + (q.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+              }
+            });
+          } catch (e) {
+            /* ignore */
+          }
+        }
+
+        // 야후 행 클릭 시: 차트 교체 막고, 하단 카드에 요약만 표시
+        function interceptClicks(root) {
+          root.addEventListener(
+            "click",
+            async (e) => {
+              const row = e.target.closest(".wl-row");
+              if (!row) return;
+              if (row.dataset.feed !== "yf") return; // binance는 기존 동작 유지
+              e.stopPropagation();
+              e.preventDefault();
+              const sym = (row.dataset.sym || "").toUpperCase();
+              // 카드만 요약 업데이트 (가격/등락률)
+              try {
+                const res = await fetch(
+                  `/api/quotes/yf?symbols=${encodeURIComponent(sym)}`
+                ).then((r) => r.json());
+                const q = (res.quotes || [])[0];
+                if (!q || q.error) return;
+                document.getElementById(
+                  "wlCardTitle"
+                ).textContent = `${sym} · YF`;
+                document.getElementById("wlCardLast").textContent =
+                  q.last != null ? Number(q.last).toFixed(4) : "-";
+                document.getElementById("wlCardChg").textContent =
+                  q.chg == null
+                    ? "-"
+                    : q.chg >= 0
+                    ? `+${q.chg.toFixed(2)}%`
+                    : `${q.chg.toFixed(2)}%`;
+                // 나머지 HUD성 항목은 외부 데이터 부재로 비움
+                document.getElementById("wlCardVWAP").textContent = "-";
+                document.getElementById("wlCardTEMA").textContent = "-";
+                document.getElementById("wlCardATR").textContent = "-";
+                document.getElementById("wlCardATRp").textContent = "-";
+                document.getElementById("wlCardCVD").textContent = "-";
+                document.getElementById("wlCardTrend").textContent = "-";
+              } catch (_) {}
+            },
+            true
+          ); // capture로 기존 핸들러보다 먼저 가로채기
+        }
+
+        // SOLUSDT가 항상 CUSTOM에 존재하도록 보장
+        async function ensureSOLUSDT() {
+          const sym = "SOLUSDT";
+          // 이미 있으면 패스
+          const exists = [...document.querySelectorAll(".wl-row")].some(
+            (r) => (r.dataset.sym || "").toUpperCase() === sym
+          );
+          if (exists) return;
+          // 기존 입력+추가 버튼을 사용 (내부 구조에 접근하지 않음)
+          const inp = document.getElementById("wlInput");
+          const btn = document.getElementById("wlAdd");
+          if (inp && btn) {
+            inp.value = sym;
+            btn.click();
+          }
+        }
+
+        // 루프 시작
+        whenReady("#wlBody", (root) => {
+          tagYFRows(root);
+          interceptClicks(root);
+          ensureSOLUSDT(); // 최초 1회 보장
+          pollYF(); // 즉시 1회
+          setInterval(pollYF, 10000); // 10초마다 갱신
+        });
+      })();
+    </script>
+    <!-- [APPEND-ONLY] Watchlist updater (uses /api/quotes/any) + ensure SOLUSDT -->
+    <style>
+      /* 색상 표시(없으면 무시) */
+      .wl-chg-pos {
+        color: var(--buy);
+      }
+      .wl-chg-neg {
+        color: var(--sell);
+      }
+    </style>
+    <script>
+      (function () {
+        // YF + Binance 모두 포함하여 10초마다 갱신
+        //const TARGETS = ["VIX","DXY","AAPL","NFLX","EURUSD","GBPUSD","USDJPY"];
+        const TARGETS = [
+          "VIX",
+          "DXY",
+          "AAPL",
+          "TSLA",
+          "NFLX",
+          "EURUSD",
+          "GBPUSD",
+          "USDJPY",
+        ];
+        const ALWAYS = "SOLUSDT"; // CUSTOM에 항상 보장
+
+        function qs(s, r = document) {
+          return r.querySelector(s);
+        }
+        function qsa(s, r = document) {
+          return Array.from(r.querySelectorAll(s));
+        }
+
+        // 워치리스트 행 생성(없으면 DOM 주입)
+        function ensureRow(sym) {
+          const list = qs("#wlList") || qs("#wlBody") || qs("#wlPanel");
+          if (!list) return null;
+
+          // 심볼 대소문자 통일
+          const SYM = sym.toUpperCase();
+
+          // 이미 존재?
+          const exist = qsa(".wl-row").find(
+            (el) => (el.dataset.sym || "").toUpperCase() === SYM
+          );
+          if (exist) return exist;
+
+          // 기본 행 DOM 구성 (기존 스타일이 있으면 그대로 적용됨)
+          const row = document.createElement("div");
+          row.className = "wl-row";
+          row.dataset.sym = SYM;
+          row.innerHTML = `
+      <span class="wl-sym">${SYM}</span>
+      <span class="wl-last">-</span>
+      <span class="wl-chg">-</span>
+    `.trim();
+
+          // 클릭 시: Binance 심볼만 차트 로딩, YF는 카드만 요약(기존 동작과 충돌 없게 이벤트 최소화)
+          row.addEventListener("click", (e) => {
+            const s = row.dataset.sym;
+            if (!s) return;
+            if (/(USDT|USDC|BTC|ETH)/i.test(s)) {
+              const inp = document.getElementById("symbol");
+              const btn = document.getElementById("loadBtn");
+              if (inp) inp.value = s;
+              btn && btn.click();
+            } else {
+              // YF는 차트 교체 대신 HUD의 Cross 카드에만 간단 표시
+              //const res = await fetch(`/api/quotes/any2?symbols=${encodeURIComponent(arr.join(','))}&use_cache=1`).then(r=>r.json());
+              fetch(`/api/quotes/any2?symbols=${encodeURIComponent(s)}`)
+                .then((r) => r.json())
+                .then(({ quotes }) => {
+                  const q = quotes && quotes[0];
+                  if (!q || q.error) return;
+                  const cross = document.getElementById("hud_data");
+                  if (cross)
+                    cross.textContent = `${s} P:${Number(q.last).toFixed(
+                      4
+                    )} CHG:${
+                      q.chg != null
+                        ? q.chg >= 0
+                          ? `+${q.chg.toFixed(2)}%`
+                          : `${q.chg.toFixed(2)}%`
+                        : "-"
+                    }`;
+                });
+            }
+          });
+
+          // 우선순위 높게 상단에 삽입
+          if (list.firstChild) list.prepend(row);
+          else list.appendChild(row);
+          return row;
+        }
+
+        // SOLUSDT는 항상 보장 (CUSTOM 섹션이 있다면 거기에 넣어도 됨)
+        function ensureSOL() {
+          // wlAdd 헬퍼가 있으면 사용
+          if (typeof window.wlAdd === "function") {
+            try {
+              window.wlAdd(ALWAYS);
+            } catch (_) {}
+            return;
+          }
+          ensureRow(ALWAYS);
+        }
+
+        // 값 갱신
+        async function refresh() {
+          const need = new Set(TARGETS.map((s) => s.toUpperCase()));
+          // 화면에 이미 있는 심볼도 포함
+          qsa(".wl-row").forEach((el) => {
+            const s = (el.dataset.sym || "").toUpperCase();
+            if (s) need.add(s);
+          });
+
+          // SOLUSDT 보장
+          need.add(ALWAYS);
+
+          const arr = Array.from(need);
+          if (!arr.length) return;
+
+          try {
+            const res = await fetch(
+              `/api/quotes/any2?symbols=${encodeURIComponent(arr.join(","))}`
+            ).then((r) => r.json());
+            const map = new Map(
+              (res.quotes || []).map((q) => [(q.symbol || "").toUpperCase(), q])
+            );
+
+            // 행 보장 + 값 바인딩
+            arr.forEach((sym) => {
+              const row = ensureRow(sym);
+              if (!row) return;
+              const lastEl = row.querySelector(".wl-last");
+              const chgEl = row.querySelector(".wl-chg");
+              const q = map.get(sym);
+              if (!q || q.error) {
+                if (lastEl) lastEl.textContent = "-";
+                if (chgEl) {
+                  chgEl.textContent = "-";
+                  chgEl.className = "wl-chg";
+                }
+                return;
+              }
+              if (lastEl)
+                lastEl.textContent =
+                  q.last != null
+                    ? Number(q.last).toFixed(
+                        /(JPY|BTC|ETH)$/i.test(sym) ? 2 : 4
+                      )
+                    : "-";
+              if (chgEl) {
+                const t =
+                  q.chg == null
+                    ? "-"
+                    : q.chg >= 0
+                    ? `+${q.chg.toFixed(2)}%`
+                    : `${q.chg.toFixed(2)}%`;
+                chgEl.textContent = t;
+                chgEl.className =
+                  "wl-chg " + (q.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+              }
+            });
+          } catch (e) {
+            // 네트워크 오류는 무시(다음 주기에서 재시도)
+          }
+        }
+
+        function start() {
+          ensureSOL();
+          refresh();
+          setInterval(refresh, 10000);
+        }
+
+        if (document.readyState !== "loading") start();
+        else document.addEventListener("DOMContentLoaded", start);
+      })();
+    </script>
+    <!-- [APPEND-ONLY] Watchlist updater using /api/quotes/any2 + ensure SOLUSDT -->
+    <style>
+      .wl-chg-pos {
+        color: var(--buy);
+      }
+      .wl-chg-neg {
+        color: var(--sell);
+      }
+    </style>
+    <script>
+      (function () {
+        const ALWAYS = "SOLUSDT";
+        //const TARGETS = ["VIX","DXY","AAPL","NFLX","EURUSD","GBPUSD","USDJPY"];
+        const TARGETS = [
+          "VIX",
+          "DXY",
+          "AAPL",
+          "TSLA",
+          "NFLX",
+          "EURUSD",
+          "GBPUSD",
+          "USDJPY",
+        ];
+
+        function qs(s, r = document) {
+          return r.querySelector(s);
+        }
+        function qsa(s, r = document) {
+          return Array.from(r.querySelectorAll(s));
+        }
+
+        function ensureRow(sym) {
+          const SYM = (sym || "").toUpperCase();
+          const list =
+            qs("#wlList") ||
+            qs("#wlBody") ||
+            qs("#wlPanel") ||
+            qs("#watchlist");
+          if (!list) return null;
+          const exist = qsa(".wl-row", list).find(
+            (el) => (el.dataset.sym || "").toUpperCase() === SYM
+          );
+          if (exist) return exist;
+
+          const row = document.createElement("div");
+          row.className = "wl-row";
+          row.dataset.sym = SYM;
+          row.innerHTML = `
+      <span class="wl-sym">${SYM}</span>
+      <span class="wl-last">-</span>
+      <span class="wl-chg">-</span>
+    `;
+          row.addEventListener("click", () => {
+            if (/(USDT|USDC|BTC|ETH)$/i.test(SYM)) {
+              const inp = document.getElementById("symbol");
+              const btn = document.getElementById("loadBtn");
+              if (inp) inp.value = SYM;
+              btn && btn.click();
+            }
+          });
+          list.prepend(row);
+          return row;
+        }
+
+        function ensureSOL() {
+          // 내부 헬퍼 있으면 사용
+          if (typeof window.wlAdd === "function") {
+            try {
+              window.wlAdd(ALWAYS);
+              return;
+            } catch (_) {}
+          }
+          ensureRow(ALWAYS);
+        }
+
+        async function refresh() {
+          const set = new Set([ALWAYS, ...TARGETS]);
+          qsa(".wl-row").forEach((el) => {
+            const s = (el.dataset.sym || "").toUpperCase();
+            if (s) set.add(s);
+          });
+          const arr = Array.from(set);
+          if (!arr.length) return;
+
+          try {
+            //const res = await fetch(`/api/quotes/any2?symbols=${encodeURIComponent(arr.join(','))}`).then(r=>r.json());
+            const res = await fetch(
+              `/api/quotes/any2?symbols=${encodeURIComponent(
+                arr.join(",")
+              )}&use_cache=1`
+            ).then((r) => r.json());
+            const map = new Map(
+              (res.quotes || []).map((q) => [(q.symbol || "").toUpperCase(), q])
+            );
+
+            arr.forEach((sym) => {
+              const row = ensureRow(sym);
+              if (!row) return;
+              const lastEl = row.querySelector(".wl-last");
+              const chgEl = row.querySelector(".wl-chg");
+              const q = map.get(sym.toUpperCase());
+              if (!q || q.error) {
+                if (lastEl) lastEl.textContent = "-";
+                if (chgEl) {
+                  chgEl.textContent = "-";
+                  chgEl.className = "wl-chg";
+                }
+                return;
+              }
+              const dp = /(JPY|BTC|ETH)$/i.test(sym) ? 2 : 4;
+              if (lastEl)
+                lastEl.textContent =
+                  q.last != null ? Number(q.last).toFixed(dp) : "-";
+              if (chgEl) {
+                const pct =
+                  q.chg == null
+                    ? "-"
+                    : q.chg >= 0
+                    ? `+${q.chg.toFixed(2)}%`
+                    : `${q.chg.toFixed(2)}%`;
+                chgEl.textContent = pct;
+                chgEl.className =
+                  "wl-chg " + (q.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+              }
+            });
+          } catch (e) {
+            // 무시 -> 다음 주기에 재시도
+          }
+        }
+
+        function start() {
+          ensureSOL();
+          refresh();
+          setInterval(refresh, 10000); // 10초 주기
+        }
+
+        if (document.readyState !== "loading") start();
+        else document.addEventListener("DOMContentLoaded", start);
+      })();
+    </script>
+
+    <!-- [APPEND-ONLY] Watchlist: keep last good value (no more '-' overwrite) -->
+    <style>
+      .wl-stale {
+        opacity: 0.7;
+      }
+    </style>
+    <script>
+      (function () {
+        const ALWAYS = "SOLUSDT";
+        const TARGETS = [
+          "VIX",
+          "DXY",
+          "AAPL",
+          "TSLA",
+          "NFLX",
+          "EURUSD",
+          "GBPUSD",
+          "USDJPY",
+        ];
+        const STATE = window._wl_state || (window._wl_state = {}); // {SYM:{last,chg,ts}}
+
+        function qs(s, r = document) {
+          return r.querySelector(s);
+        }
+        function qsa(s, r = document) {
+          return Array.from(r.querySelectorAll(s));
+        }
+
+        function hostList() {
+          return (
+            qs("#wlList") || qs("#wlBody") || qs("#wlPanel") || qs("#watchlist")
+          );
+        }
+        function ensureRow(sym) {
+          const SYM = (sym || "").toUpperCase();
+          const list = hostList();
+          if (!list) return null;
+          let row = qsa(".wl-row", list).find(
+            (el) => (el.dataset.sym || "").toUpperCase() === SYM
+          );
+          if (row) return row;
+          row = document.createElement("div");
+          row.className = "wl-row";
+          row.dataset.sym = SYM;
+          row.innerHTML = `<span class="wl-sym">${SYM}</span><span class="wl-last">-</span><span class="wl-chg">-</span>`;
+          row.addEventListener("click", () => {
+            if (/(USDT|USDC|BTC|ETH)$/i.test(SYM)) {
+              const inp = qs("#symbol");
+              const btn = qs("#loadBtn");
+              if (inp) inp.value = SYM;
+              btn && btn.click();
+            }
+          });
+          list.prepend(row);
+          return row;
+        }
+
+        async function refresh() {
+          const arr = [ALWAYS, ...TARGETS];
+          try {
+            const res = await fetch(
+              `/api/quotes/any2?symbols=${encodeURIComponent(
+                arr.join(",")
+              )}&use_cache=1`
+            ).then((r) => r.json());
+            const map = new Map(
+              (res.quotes || []).map((q) => [(q.symbol || "").toUpperCase(), q])
+            );
+            arr.forEach((sym) => {
+              const row = ensureRow(sym);
+              if (!row) return;
+              const lastEl = row.querySelector(".wl-last");
+              const chgEl = row.querySelector(".wl-chg");
+
+              const q = map.get(sym.toUpperCase());
+              if (q && !q.error && q.last != null) {
+                // 정상 업데이트
+                STATE[sym] = {
+                  last: q.last,
+                  chg: q.chg,
+                  ts: q.ts || Date.now() / 1000,
+                };
+                const dp = /(JPY|BTC|ETH)$/i.test(sym)
+                  ? 2
+                  : /(VIX)$/i.test(sym)
+                  ? 2
+                  : 4;
+                lastEl.textContent = Number(q.last).toFixed(dp);
+                if (q.chg == null) {
+                  chgEl.textContent = "-";
+                  chgEl.className = "wl-chg";
+                } else {
+                  const pct =
+                    q.chg >= 0
+                      ? `+${q.chg.toFixed(2)}%`
+                      : `${q.chg.toFixed(2)}%`;
+                  chgEl.textContent = pct;
+                  chgEl.className =
+                    "wl-chg " + (q.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+                }
+                row.classList.remove("wl-stale");
+              } else {
+                // 실패 시: 마지막 정상값 유지(스테일 표시)
+                const prev = STATE[sym];
+                if (prev) {
+                  const dp = /(JPY|BTC|ETH)$/i.test(sym)
+                    ? 2
+                    : /(VIX)$/i.test(sym)
+                    ? 2
+                    : 4;
+                  lastEl.textContent = Number(prev.last).toFixed(dp);
+                  if (prev.chg == null) {
+                    chgEl.textContent = "-";
+                    chgEl.className = "wl-chg";
+                  } else {
+                    const pct =
+                      prev.chg >= 0
+                        ? `+${prev.chg.toFixed(2)}%`
+                        : `${prev.chg.toFixed(2)}%`;
+                    chgEl.textContent = pct;
+                    chgEl.className =
+                      "wl-chg " + (prev.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+                  }
+                  row.classList.add("wl-stale");
+                } else {
+                  // 첫 로드부터 실패면 일단 '-'
+                  lastEl.textContent = "-";
+                  chgEl.textContent = "-";
+                  row.classList.add("wl-stale");
+                }
+              }
+            });
+          } catch (e) {
+            // 네트워크 전체 실패 시, 전부 스테일 유지
+            arr.forEach((sym) => {
+              const row = ensureRow(sym);
+              if (!row) return;
+              const lastEl = row.querySelector(".wl-last");
+              const chgEl = row.querySelector(".wl-chg");
+              const prev = STATE[sym];
+              if (prev) {
+                const dp = /(JPY|BTC|ETH)$/i.test(sym)
+                  ? 2
+                  : /(VIX)$/i.test(sym)
+                  ? 2
+                  : 4;
+                lastEl.textContent = Number(prev.last).toFixed(dp);
+                if (prev.chg == null) {
+                  chgEl.textContent = "-";
+                  chgEl.className = "wl-chg";
+                } else {
+                  const pct =
+                    prev.chg >= 0
+                      ? `+${prev.chg.toFixed(2)}%`
+                      : `${prev.chg.toFixed(2)}%`;
+                  chgEl.textContent = pct;
+                  chgEl.className =
+                    "wl-chg " + (prev.chg >= 0 ? "wl-chg-pos" : "wl-chg-neg");
+                }
+                row.classList.add("wl-stale");
+              }
+            });
+          }
+        }
+
+        function start() {
+          ensureRow(ALWAYS);
+          TARGETS.forEach(ensureRow);
+          refresh();
+          setInterval(refresh, 115000); // 15s
+        }
+        if (document.readyState !== "loading") start();
+        else document.addEventListener("DOMContentLoaded", start);
+      })();
+    </script>
+
+    <!-- [APPEND-ONLY] Watchlist value guard + keepalive -->
+    <style>
+      /* 실패로 스테일 상태일 때 가볍게 표시(옵션) */
+      .wl-stale {
+        opacity: 0.75;
+      }
+    </style>
+    <script>
+      (function () {
+        // ------ 설정 -------
+        const ROW_SEL = ".wl-row";
+        const LAST_SEL = ".wl-last";
+        const CHG_SEL = ".wl-chg";
+        const KEEPALIVE_MS = 12000; // 12초마다 비어있는 칸만 보충
+
+        // 심볼별 마지막 정상값 메모리
+        const MEM = window.__WL_MEM__ || (window.__WL_MEM__ = {}); // {SYM:{last, chg}}
+
+        // 유효성 판정
+        function isValidPrice(txt) {
+          if (!txt) return false;
+          const s = String(txt).trim();
+          if (s === "-" || s === "—") return false;
+          const v = parseFloat(s.replace(/,/g, ""));
+          return Number.isFinite(v);
+        }
+        function isValidChg(txt) {
+          if (!txt) return false;
+          const s = String(txt).trim();
+          if (s === "-" || s === "—") return false;
+          const m = s.match(/-?\+?([\d.]+)/);
+          return !!m && Number.isFinite(parseFloat(m[1]));
+        }
+        function dpOf(sym) {
+          return /(JPY|BTC|ETH)$/i.test(sym) ? 2 : /VIX$/i.test(sym) ? 2 : 4;
+        }
+
+        // 저장/복구
+        function saveRow(row) {
+          const sym = (
+            row.dataset.sym ||
+            row.querySelector(".wl-sym")?.textContent ||
+            ""
+          ).toUpperCase();
+          if (!sym) return;
+          const lastEl = row.querySelector(LAST_SEL),
+            chgEl = row.querySelector(CHG_SEL);
+          if (!lastEl || !chgEl) return;
+
+          MEM[sym] = MEM[sym] || {};
+          if (isValidPrice(lastEl.textContent))
+            MEM[sym].last = parseFloat(lastEl.textContent.replace(/,/g, ""));
+          if (isValidChg(chgEl.textContent))
+            MEM[sym].chg = parseFloat(
+              chgEl.textContent.replace(/[^\d.-]/g, "")
+            );
+        }
+        function restoreRow(row) {
+          const sym = (
+            row.dataset.sym ||
+            row.querySelector(".wl-sym")?.textContent ||
+            ""
+          ).toUpperCase();
+          if (!sym) return;
+          const st = MEM[sym];
+          if (!st) return;
+          const lastEl = row.querySelector(LAST_SEL),
+            chgEl = row.querySelector(CHG_SEL);
+          if (!lastEl || !chgEl) return;
+
+          if (!isValidPrice(lastEl.textContent) && st.last != null) {
+            lastEl.textContent = st.last.toFixed(dpOf(sym));
+          }
+          if (!isValidChg(chgEl.textContent) && st.chg != null) {
+            chgEl.textContent =
+              st.chg >= 0 ? `+${st.chg.toFixed(2)}%` : `${st.chg.toFixed(2)}%`;
+            chgEl.classList.toggle("wl-chg-pos", st.chg >= 0);
+            chgEl.classList.toggle("wl-chg-neg", st.chg < 0);
+          }
+          row.classList.add("wl-stale");
+        }
+
+        // DOM 변경을 감시: 값이 '-' 등으로 덮어써지면 즉시 되돌림
+        const host = document.getElementById("wlPanel") || document.body;
+        const mo = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            // 텍스트/노드 변경이 생긴 행만 검사
+            const nodes = [];
+            if (m.type === "characterData") nodes.push(m.target.parentElement);
+            m.addedNodes &&
+              m.addedNodes.forEach((n) =>
+                nodes.push(n.nodeType === 1 ? n : n.parentElement)
+              );
+            nodes.push(m.target);
+
+            nodes.forEach((n) => {
+              const row = n && n.closest ? n.closest(ROW_SEL) : null;
+              if (!row) return;
+              const lastEl = row.querySelector(LAST_SEL),
+                chgEl = row.querySelector(CHG_SEL);
+              if (!lastEl || !chgEl) return;
+
+              const priceOK = isValidPrice(lastEl.textContent);
+              const chgOK = isValidChg(chgEl.textContent);
+              if (priceOK || chgOK) saveRow(row); // 정상값이면 캐시 업데이트
+              if (!priceOK || !chgOK) restoreRow(row); // 비정상이면 되돌림
+            });
+          }
+        });
+        mo.observe(host, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+        });
+
+        // 초기 스냅샷 저장
+        document.querySelectorAll(ROW_SEL).forEach(saveRow);
+
+        // 비어있는 칸만 보충하는 Keepalive
+        async function keepalive() {
+          try {
+            const rows = Array.from(document.querySelectorAll(ROW_SEL));
+            if (!rows.length) return;
+            const syms = [
+              ...new Set(
+                rows
+                  .map((r) =>
+                    (
+                      r.dataset.sym ||
+                      r.querySelector(".wl-sym")?.textContent ||
+                      ""
+                    ).toUpperCase()
+                  )
+                  .filter(Boolean)
+              ),
+            ];
+            if (!syms.length) return;
+
+            const res = await fetch(
+              `/api/quotes/any2?symbols=${encodeURIComponent(
+                syms.join(",")
+              )}&use_cache=1`
+            )
+              .then((r) => r.json())
+              .catch(() => null);
+            if (!res || !res.quotes) return;
+            const map = new Map(
+              res.quotes.map((q) => [(q.symbol || "").toUpperCase(), q])
+            );
+
+            rows.forEach((row) => {
+              const sym = (
+                row.dataset.sym ||
+                row.querySelector(".wl-sym")?.textContent ||
+                ""
+              ).toUpperCase();
+              const q = map.get(sym);
+              if (!sym || !q || q.error || q.last == null) return;
+
+              const lastEl = row.querySelector(LAST_SEL),
+                chgEl = row.querySelector(CHG_SEL);
+              if (!lastEl || !chgEl) return;
+
+              // 현재가가 비정상일 때만 채움(정상값은 기존 갱신 로직 존중)
+              if (!isValidPrice(lastEl.textContent))
+                lastEl.textContent = Number(q.last).toFixed(dpOf(sym));
+              if (!isValidChg(chgEl.textContent) && q.chg != null) {
+                chgEl.textContent =
+                  q.chg >= 0 ? `+${q.chg.toFixed(2)}%` : `${q.chg.toFixed(2)}%`;
+                chgEl.classList.toggle("wl-chg-pos", q.chg >= 0);
+                chgEl.classList.toggle("wl-chg-neg", q.chg < 0);
+              }
+              saveRow(row);
+            });
+          } catch (_) {}
+        }
+        keepalive();
+        setInterval(keepalive, KEEPALIVE_MS);
+      })();
+    </script>
+
+    <script>
+      /* [APPEND-ONLY] 5초마다: 불러오기 클릭 → loadAll 완료 대기 → 전략계산 클릭 */
+      (function () {
+        function ready(fn) {
+          if (document.readyState !== "loading") fn();
+          else document.addEventListener("DOMContentLoaded", fn);
+        }
+
+        // 1) 한 번만 기다리는 유틸 (이벤트 or 타임아웃)
+        function waitOnce(eventName, timeoutMs = 15000) {
+          return new Promise((resolve) => {
+            let timer = null;
+            const on = () => {
+              cleanup();
+              resolve(true);
+            };
+            const to = () => {
+              cleanup();
+              resolve(false);
+            };
+            function cleanup() {
+              document.removeEventListener(eventName, on);
+              if (timer) clearTimeout(timer);
+            }
+            document.addEventListener(eventName, on, { once: true });
+            timer = setTimeout(to, timeoutMs);
+          });
+        }
+
+        ready(() => {
+          const autoBtn = document.createElement("button");
+          autoBtn.id = "autoLoadThenStratBtn";
+          autoBtn.textContent = "자동실행 OFF";
+          autoBtn.className = "toolbtn";
+          // 상단 첫 그룹 끝에 버튼 추가
+          const firstGroup = document.querySelector("header .group");
+          if (firstGroup) firstGroup.appendChild(autoBtn);
+
+          // 2) loadAll 종료 신호를 받기 위해 monkey-patch (한 번만)
+          if (
+            typeof window.loadAll === "function" &&
+            !window.__patch_loadAll_done__
+          ) {
+            window.__patch_loadAll_done__ = true;
+            const _orig = window.loadAll;
+            window.loadAll = async function (...args) {
+              try {
+                return await _orig.apply(this, args);
+              } finally {
+                // 불러오기 완료 이벤트 브로드캐스트
+                document.dispatchEvent(new CustomEvent("tg:loadAll:done"));
+              }
+            };
+          }
+
+          let timer = null;
+          let busy = false;
+
+          async function tick() {
+            if (busy) return;
+            busy = true;
+            try {
+              const loadBtn = document.getElementById("loadBtn");
+              const stratBtn = document.getElementById("runStratBtn");
+              if (!loadBtn || !stratBtn) return;
+
+              // (A) 불러오기 버튼 "클릭"
+              loadBtn.click(); // 실제 클릭 이벤트 트리거 → 내부에서 loadAll 실행됨  :contentReference[oaicite:2]{index=2}
+
+              // (B) loadAll 완료까지 대기 (패치 실패 시 타임아웃되면 바로 진행)
+              await waitOnce("tg:loadAll:done", 20000);
+
+              // (C) 전략계산 버튼 "클릭" → 서버 전략 실행 + 마커 갱신  :contentReference[oaicite:3]{index=3}
+              stratBtn.click();
+            } finally {
+              busy = false;
+            }
+          }
+
+          function start() {
+            if (timer) return;
+            timer = setInterval(tick, 5000); // 5초 주기
+            tick(); // 즉시 1회
+            autoBtn.textContent = "자동실행 ON (5s)";
+            autoBtn.classList.add("active");
+          }
+          function stop() {
+            if (!timer) return;
+            clearInterval(timer);
+            timer = null;
+            autoBtn.textContent = "자동실행 OFF";
+            autoBtn.classList.remove("active");
+          }
+
+          autoBtn.addEventListener("click", () => (timer ? stop() : start()));
+
+          // 페이지 진입 시 곧바로 시작하려면 ↓ 주석 해제
+          start();
+        });
+      })();
+    </script>
+  
+<!-- append-only: ATR/Stoch add-on -->
+<script>
+/* ===== ATR/STOCH ADDON ===== */
+(function(){
+  const NS = (window.__atrstoch_addon ||= {});
+  const $ = (id) => document.getElementById(id);
+
+  // -------- local helpers --------
+  function SMA(arr, L){
+    let sum=0; const out=Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=L) sum-=arr[i-L]; if(i>=L-1) out[i]=sum/L; }
+    return out;
+  }
+  function ATR(ks, L=14){
+    const out=Array(ks.length).fill(null); let prevC=null, acc=0, q=[];
+    const tr=ks.map(k=>{ const t=prevC==null? (k.h-k.l):Math.max(k.h-k.l, Math.abs(k.h-prevC), Math.abs(k.l-prevC)); prevC=k.c; return t; });
+    for(let i=0;i<tr.length;i++){ q.push(tr[i]); acc+=tr[i]; if(i>=L){ acc-=q.shift(); } if(i>=L-1) out[i]=acc/L; }
+    return out;
+  }
+  function Stochastic(ks, L=14, K=3, D=3){
+    const kRaw=Array(ks.length).fill(null);
+    for(let i=0;i<ks.length;i++){
+      const from=Math.max(0,i-L+1); let hi=-Infinity, lo=Infinity;
+      for(let j=from;j<=i;j++){ if(ks[j].h>hi) hi=ks[j].h; if(ks[j].l<lo) lo=ks[j].l; }
+      if(i>=L-1){ const den=hi-lo; kRaw[i]=den===0?50:((ks[i].c-lo)/den)*100; }
+    }
+    const kSmooth=SMA(kRaw.map(x=>x??0), K).map((v,i)=>kRaw[i]==null?null:v);
+    const dArr   =SMA(kSmooth.map(x=>x??0), D).map((v,i)=>kSmooth[i]==null?null:v);
+    return { k:kSmooth, d:dArr };
+  }
+  function mapFiniteSeries(ks, arr){
+    const out=[];
+    for(let i=0;i<ks.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out.push({ time: ks[i].t, value: v }); }
+    return out;
+  }
+
+  // -------- ensure series & price scales --------
+  function ensureSeries(){
+    const sc = window.subChart;
+    if(!sc) return false;
+
+    if(!NS.atrSeries){
+      NS.atrSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "atr", visible: ($("showATR")?.checked ?? true) });
+      try { sc.priceScale("atr").applyOptions({ scaleMargins: { top: 0.15, bottom: 0.05 } }); } catch(_){}
+    }
+    if(!NS.stochKSeries){
+      NS.stochKSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "stoch", visible: ($("showSTOCH")?.checked ?? true) });
+    }
+    if(!NS.stochDSeries){
+      NS.stochDSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "stoch", visible: ($("showSTOCH")?.checked ?? true) });
+      try { sc.priceScale("stoch").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } }); } catch(_){}
+    }
+    return true;
+  }
+
+  // -------- compute & update --------
+  function updateATRStoch(){
+    const ks = window.lastKs;
+    if(!Array.isArray(ks) || ks.length===0) return;
+    if(!ensureSeries()) return;
+
+    const atr = ATR(ks, 14);
+    const st  = Stochastic(ks, 14, 3, 3);
+
+    // cache for reapply when other toggles rebuild/affect scales
+    NS.cache = { ks, atr, stK: st.k, stD: st.d };
+
+    NS.atrSeries.setData(mapFiniteSeries(ks, atr));
+    NS.stochKSeries.setData(mapFiniteSeries(ks, st.k));
+    NS.stochDSeries.setData(mapFiniteSeries(ks, st.d));
+
+    // respect current toggles (default ON if not present)
+    const atrOn = $("showATR") ? $("showATR").checked : true;
+    const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
+    NS.atrSeries.applyOptions({ visible: atrOn });
+    NS.stochKSeries.applyOptions({ visible: stoOn });
+    NS.stochDSeries.applyOptions({ visible: stoOn });
+  }
+
+  // reapply after other toggles affect layout/visibility
+  function reapplyAll(){
+    if(!ensureSeries()) return;
+    const C = NS.cache;
+    const ks = window.lastKs;
+    if(C && ks){
+      if(C.atr && NS.atrSeries) NS.atrSeries.setData(mapFiniteSeries(ks, C.atr));
+      if(C.stK && NS.stochKSeries) NS.stochKSeries.setData(mapFiniteSeries(ks, C.stK));
+      if(C.stD && NS.stochDSeries) NS.stochDSeries.setData(mapFiniteSeries(ks, C.stD));
+    }
+    const atrOn = $("showATR") ? $("showATR").checked : true;
+    const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
+    NS.atrSeries && NS.atrSeries.applyOptions({ visible: atrOn });
+    NS.stochKSeries && NS.stochKSeries.applyOptions({ visible: stoOn });
+    NS.stochDSeries && NS.stochDSeries.applyOptions({ visible: stoOn });
+  }
+
+  // -------- wire into lifecycle (append-only) --------
+  const _build = window.buildCharts;
+  if(typeof _build === "function"){
+    window.buildCharts = function(...args){
+      const r = _build.apply(this, args);
+      try { ensureSeries(); reapplyAll(); } catch(e){ console.warn('[ATR/Stoch addon] ensure error', e); }
+      return r;
+    };
+  }
+  const _load = window.loadAll;
+  if(typeof _load === "function"){
+    window.loadAll = async function(...args){
+      const r = await _load.apply(this, args);
+      try { updateATRStoch(); } catch(e){ console.warn('[ATR/Stoch addon] update error', e); }
+      return r;
+    };
+  }
+
+  // listen to ANY checkbox change to reapply (coexist with other toggles)
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if(t && t.tagName === 'INPUT' && t.type === 'checkbox'){
+      setTimeout(() => { try { reapplyAll(); } catch(_){ } }, 0);
+    }
+  });
+
+  // initial
+  document.addEventListener('DOMContentLoaded', () => {
+    try { ensureSeries(); updateATRStoch(); } catch(_){}
+    const atrCk = $('showATR'); if(atrCk) atrCk.addEventListener('change', e => NS.atrSeries?.applyOptions({ visible: e.target.checked }));
+    const stoCk = $('showSTOCH'); if(stoCk) stoCk.addEventListener('change', e => { NS.stochKSeries?.applyOptions({ visible: e.target.checked }); NS.stochDSeries?.applyOptions({ visible: e.target.checked }); });
+  });
+})();
+/* ===== /ATR/STOCH ADDON ===== */
+</script>
+</body>
+</html>
