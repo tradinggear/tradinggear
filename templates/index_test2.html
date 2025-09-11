@@ -3077,5 +3077,94 @@ $("loadBtn").addEventListener("click", loadAll);
         });
       })();
     </script>
-  </body>
+  
+<!-- append-only: ATR/Stoch add-on -->
+<script>
+/* ===== ATR/STOCH ADDON ===== */
+(function(){
+  const NS = (window.__atrstoch_addon ||= {});
+  const $ = (id) => document.getElementById(id);
+
+  // local helpers (self-contained)
+  function SMA(arr, L){
+    let sum=0; const out=Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=L) sum-=arr[i-L]; if(i>=L-1) out[i]=sum/L; }
+    return out;
+  }
+  function ATR(ks, L=14){
+    const out=Array(ks.length).fill(null); let prevC=null, acc=0, q=[];
+    const tr=ks.map(k=>{ const t=prevC==null? (k.h-k.l):Math.max(k.h-k.l, Math.abs(k.h-prevC), Math.abs(k.l-prevC)); prevC=k.c; return t; });
+    for(let i=0;i<tr.length;i++){ q.push(tr[i]); acc+=tr[i]; if(i>=L){ acc-=q.shift(); } if(i>=L-1) out[i]=acc/L; }
+    return out;
+  }
+  function Stochastic(ks, L=14, K=3, D=3){
+    const kRaw=Array(ks.length).fill(null);
+    for(let i=0;i<ks.length;i++){
+      const from=Math.max(0,i-L+1); let hi=-Infinity, lo=Infinity;
+      for(let j=from;j<=i;j++){ if(ks[j].h>hi) hi=ks[j].h; if(ks[j].l<lo) lo=ks[j].l; }
+      if(i>=L-1){ const den=hi-lo; kRaw[i]=den===0?50:((ks[i].c-lo)/den)*100; }
+    }
+    const kSmooth=SMA(kRaw.map(x=>x??0), K).map((v,i)=>kRaw[i]==null?null:v);
+    const dArr   =SMA(kSmooth.map(x=>x??0), D).map((v,i)=>kSmooth[i]==null?null:v);
+    return { k:kSmooth, d:dArr };
+  }
+  function mapFiniteSeries(ks, arr){
+    const out=[];
+    for(let i=0;i<ks.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out.push({ time: ks[i].t, value: v }); }
+    return out;
+  }
+
+  function ensureSeries(){
+    if(!window.subChart) return false;
+    if(!NS.atrSeries){
+      NS.atrSeries = subChart.addLineSeries({ lineWidth: 1, priceScaleId: "left", visible: document.getElementById("showATR")?.checked ?? true });
+    }
+    if(!NS.stochKSeries){
+      NS.stochKSeries = subChart.addLineSeries({ lineWidth: 1, priceScaleId: "left", visible: document.getElementById("showSTOCH")?.checked ?? true });
+    }
+    if(!NS.stochDSeries){
+      NS.stochDSeries = subChart.addLineSeries({ lineWidth: 1, priceScaleId: "left", visible: document.getElementById("showSTOCH")?.checked ?? true });
+    }
+    return true;
+  }
+
+  function updateATRStoch(){
+    const ks = window.lastKs;
+    if(!Array.isArray(ks) || ks.length===0) return;
+    if(!ensureSeries()) return;
+    const atr = ATR(ks, 14);
+    const st = Stochastic(ks, 14, 3, 3);
+    NS.atrSeries.setData(mapFiniteSeries(ks, atr));
+    NS.stochKSeries.setData(mapFiniteSeries(ks, st.k));
+    NS.stochDSeries.setData(mapFiniteSeries(ks, st.d));
+  }
+
+  // wire into existing lifecycle (append-only)
+  const _build = window.buildCharts;
+  if(typeof _build === "function"){
+    window.buildCharts = function(...args){
+      const r = _build.apply(this, args);
+      try { ensureSeries(); } catch(e){ console.warn('[ATR/Stoch addon] ensure error', e); }
+      return r;
+    };
+  }
+  const _load = window.loadAll;
+  if(typeof _load === "function"){
+    window.loadAll = async function(...args){
+      const r = await _load.apply(this, args);
+      try { updateATRStoch(); } catch(e){ console.warn('[ATR/Stoch addon] update error', e); }
+      return r;
+    };
+  }
+
+  // optional: hook checkboxes if present
+  document.addEventListener('DOMContentLoaded', () => {
+    try { ensureSeries(); updateATRStoch(); } catch(_) {}
+    const atrCk = $('showATR'); if(atrCk) atrCk.addEventListener('change', e => NS.atrSeries?.applyOptions({ visible: e.target.checked }));
+    const stoCk = $('showSTOCH'); if(stoCk) stoCk.addEventListener('change', e => { NS.stochKSeries?.applyOptions({ visible: e.target.checked }); NS.stochDSeries?.applyOptions({ visible: e.target.checked }); });
+  });
+})();
+/* ===== /ATR/STOCH ADDON ===== */
+</script>
+</body>
 </html>

@@ -252,7 +252,7 @@ def tv_webhook(inp: WebhookIn):
 
 @app.get("/")
 def index(request: Request):
-    return templates.TemplateResponse("index_test.html", {"request": request})
+    return templates.TemplateResponse("index7.html", {"request": request})
 
 # ----- [APPEND-ONLY] Superchart helpers ----- #
 from fastapi import Query

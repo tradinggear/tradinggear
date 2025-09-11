@@ -571,17 +571,17 @@
         });
         atrSeries = subChart.addLineSeries({
           lineWidth: 1,
-          priceScaleId: "left",
+          priceScaleId: "atr",
           visible: $("showATR")?.checked ?? false,
         });
         stochKSeries = subChart.addLineSeries({
           lineWidth: 1,
-          priceScaleId: "left",
+          priceScaleId: "stoch",
           visible: $("showSTOCH")?.checked ?? false,
         });
         stochDSeries = subChart.addLineSeries({
           lineWidth: 1,
-          priceScaleId: "left",
+          priceScaleId: "stoch",
           visible: $("showSTOCH")?.checked ?? false,
         });
 const resize = () => {
@@ -681,56 +681,106 @@ const resize = () => {
         }
         return out;
       }
+      
       function drawZones(ctx) {
-        if (!$("showOB").checked || !zones.length) return;
-        const bull = css("--ob-bull"),
-          bear = css("--ob-bear"),
-          d = DPR(),
-          cv = $("overlayMain");
+        const obToggle = document.getElementById("showOB");
+        if ((obToggle && !obToggle.checked) || !zones.length) return;
+
+        const d = DPR();
+        const cv = document.getElementById("overlayMain");
+        const bullBorder = css("--ob-bull");
+        const bearBorder = css("--ob-bear");
+
+        // 세로 간격 오프셋(px)
+        const spacing = 6 * d; 
+
         const list = [...zones].sort((a, b) => a.end - b.end);
-        const total = list.length;
-        list.forEach((z, i) => {
+
+        list.forEach((z, idx) => {
           let x1 = timeToCssX(mainChart, z.start),
-            x2 = timeToCssX(mainChart, z.end);
-          let y1 = priceToCssY(candleSeries, z.top),
-            y2 = priceToCssY(candleSeries, z.bottom);
+              x2 = timeToCssX(mainChart, z.end);
+          let yTop = priceToCssY(candleSeries, z.top),
+              yBot = priceToCssY(candleSeries, z.bottom);
+
           if (x1 == null && x2 == null) return;
           if (x1 == null) x1 = 0;
           if (x2 == null) x2 = cv.clientWidth;
-          if (y1 == null) y1 = 0;
-          if (y2 == null) y2 = cv.clientHeight;
-          x1 *= d;
-          x2 *= d;
-          y1 *= d;
-          y2 *= d;
+          if (yTop == null) yTop = 0;
+          if (yBot == null) yBot = cv.clientHeight;
+
+          x1 *= d; x2 *= d; yTop *= d; yBot *= d;
+
+          // === 간격 적용 ===
+          yTop -= spacing;   // 위로 올림
+          yBot += spacing;   // 아래로 내림
+
           const L = Math.min(x1, x2),
-            R = Math.max(x1, x2),
-            T = Math.min(y1, y2),
-            B = Math.max(y1, y2);
-          const age = (i + 1) / total,
-            color = z.type === "bullish" ? bull : bear;
+                R = Math.max(x1, x2),
+                T = Math.min(yTop, yBot),
+                B = Math.max(yTop, yBot),
+                W = Math.max(1, R - L),
+                H = Math.max(1, B - T);
+
+          const isBull = z.type === "bullish";
+          const border = isBull ? bullBorder : bearBorder;
+
+          // 채우기
+          ctx.save();
+          ctx.fillStyle = isBull ? "rgba(56, 189, 148, 0.18)" : "rgba(244, 63, 94, 0.18)";
+          ctx.fillRect(L, T, W, H);
+          ctx.globalCompositeOperation = "multiply";
+          ctx.fillStyle = "rgba(6, 12, 24, 0.35)";
+          ctx.fillRect(L, T, W, H);
+          ctx.restore();
+
+          // 외곽선
+          ctx.save();
+          ctx.lineWidth = 1.6 * d;
+          ctx.strokeStyle = border;
+          ctx.setLineDash([]);
+          ctx.strokeRect(L + 0.5 * d, T + 0.5 * d, W - 1 * d, H - 1 * d);
+          ctx.restore();
+
+          // 점선(상/하단)
+          ctx.save();
+          ctx.lineWidth = 1.2 * d;
+          ctx.setLineDash([6 * d, 4 * d]);
+          ctx.strokeStyle = "#ffffff66";
+          ctx.beginPath();
+          ctx.moveTo(L + 8 * d, T + 8 * d);
+          ctx.lineTo(R - 8 * d, T + 8 * d);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(L + 8 * d, B - 8 * d);
+          ctx.lineTo(R - 8 * d, B - 8 * d);
+          ctx.stroke();
+          ctx.restore();
+
+          // 우측 중앙 + 버튼
+          const cx = Math.min(R - 10 * d, cv.width - 14 * d);
+          const cy = (T + B) / 2;
           ctx.save();
           ctx.beginPath();
-          ctx.rect(L, T, Math.max(1, R - L), Math.max(1, B - T));
-          ctx.lineWidth = (2 + 2 * age) * d;
-          ctx.strokeStyle = color;
-          ctx.setLineDash([6 * d, 3 * d]);
-          ctx.shadowBlur = 6 * d;
-          ctx.shadowColor = color + "80";
+          ctx.arc(cx, cy, 7 * d, 0, Math.PI * 2);
+          ctx.fillStyle = "#111827";
+          ctx.globalAlpha = 0.9;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = 1.2 * d;
+          ctx.strokeStyle = "#d1d5db";
           ctx.stroke();
-          ctx.font = `${12 * d}px ui-sans-serif,system-ui`;
-          const label = z.type === "bullish" ? "BULL" : "BEAR",
-            w = ctx.measureText(label).width + 8 * d,
-            h = 16 * d;
-          ctx.fillStyle = "rgba(0,0,0,0.55)";
-          ctx.fillRect(L + 4 * d, T + 4 * d, w, h);
-          ctx.fillStyle = "#fff";
-          ctx.fillText(label, L + 8 * d, T + 16 * d);
+          ctx.beginPath();
+          ctx.moveTo(cx - 3 * d, cy);
+          ctx.lineTo(cx + 3 * d, cy);
+          ctx.moveTo(cx, cy - 3 * d);
+          ctx.lineTo(cx, cy + 3 * d);
+          ctx.strokeStyle = "#e5e7eb";
+          ctx.lineWidth = 1.4 * d;
+          ctx.stroke();
           ctx.restore();
         });
       }
-
-      /* ===== Drawings ===== */
+/* ===== Drawings ===== */
       const genId = () => Math.random().toString(36).slice(2, 9);
       function setTool(t) {
         tool = t;
@@ -1047,6 +1097,25 @@ const resize = () => {
         }
         return out;
       }
+    function reapplyStochAtr(){
+      try{
+        if (!window.subChart) return;
+        if (atrSeries && Array.isArray(atrArr) && lastKs?.length) {
+          atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
+        }
+        if (stochKSeries && Array.isArray(stochK) && lastKs?.length) {
+          stochKSeries.setData(mapFiniteSeries(lastKs, stochK));
+        }
+        if (stochDSeries && Array.isArray(stochD) && lastKs?.length) {
+          stochDSeries.setData(mapFiniteSeries(lastKs, stochD));
+        }
+        const atrOn = document.getElementById("showATR") ? document.getElementById("showATR").checked : true;
+        const stoOn = document.getElementById("showSTOCH") ? document.getElementById("showSTOCH").checked : true;
+        atrSeries && atrSeries.applyOptions({ visible: atrOn });
+        stochKSeries && stochKSeries.applyOptions({ visible: stoOn });
+        stochDSeries && stochDSeries.applyOptions({ visible: stoOn });
+      }catch(e){ console.warn('[reapplyStochAtr]', e); }
+    }
     async function loadAll() {
         const symbol = $("symbol").value.trim().toUpperCase();
         const interval = $("interval").value;
@@ -1111,6 +1180,7 @@ const resize = () => {
         await refreshZones({ forceServer: true });
         await refreshHUD();
         if (typeof updateLocalHUD==="function") updateLocalHUD();
+        reapplyStochAtr();
         drawAll();
       }
       async function refreshHUD() {
@@ -1419,6 +1489,11 @@ $("loadBtn").addEventListener("click", loadAll);
         $("rangeBars").addEventListener("input", applyReplay);
         $("rangeStart").addEventListener("input", applyReplay);
         $("playBtn").addEventListener("click", playReplay);
+
+        document.addEventListener("change", (e) => {
+          const t = e.target; if (!t || t.tagName !== "INPUT" || t.type !== "checkbox") return;
+          try { reapplyStochAtr(); } catch(_) {}
+        });
 
         // keyboard
         window.addEventListener("keydown", (e) => {
@@ -3077,5 +3152,137 @@ $("loadBtn").addEventListener("click", loadAll);
         });
       })();
     </script>
-  </body>
+  
+<!-- append-only: ATR/Stoch add-on -->
+<script>
+/* ===== ATR/STOCH ADDON ===== */
+(function(){
+  const NS = (window.__atrstoch_addon ||= {});
+  const $ = (id) => document.getElementById(id);
+
+  // -------- local helpers --------
+  function SMA(arr, L){
+    let sum=0; const out=Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=L) sum-=arr[i-L]; if(i>=L-1) out[i]=sum/L; }
+    return out;
+  }
+  function ATR(ks, L=14){
+    const out=Array(ks.length).fill(null); let prevC=null, acc=0, q=[];
+    const tr=ks.map(k=>{ const t=prevC==null? (k.h-k.l):Math.max(k.h-k.l, Math.abs(k.h-prevC), Math.abs(k.l-prevC)); prevC=k.c; return t; });
+    for(let i=0;i<tr.length;i++){ q.push(tr[i]); acc+=tr[i]; if(i>=L){ acc-=q.shift(); } if(i>=L-1) out[i]=acc/L; }
+    return out;
+  }
+  function Stochastic(ks, L=14, K=3, D=3){
+    const kRaw=Array(ks.length).fill(null);
+    for(let i=0;i<ks.length;i++){
+      const from=Math.max(0,i-L+1); let hi=-Infinity, lo=Infinity;
+      for(let j=from;j<=i;j++){ if(ks[j].h>hi) hi=ks[j].h; if(ks[j].l<lo) lo=ks[j].l; }
+      if(i>=L-1){ const den=hi-lo; kRaw[i]=den===0?50:((ks[i].c-lo)/den)*100; }
+    }
+    const kSmooth=SMA(kRaw.map(x=>x??0), K).map((v,i)=>kRaw[i]==null?null:v);
+    const dArr   =SMA(kSmooth.map(x=>x??0), D).map((v,i)=>kSmooth[i]==null?null:v);
+    return { k:kSmooth, d:dArr };
+  }
+  function mapFiniteSeries(ks, arr){
+    const out=[];
+    for(let i=0;i<ks.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out.push({ time: ks[i].t, value: v }); }
+    return out;
+  }
+
+  // -------- ensure series & price scales --------
+  function ensureSeries(){
+    const sc = window.subChart;
+    if(!sc) return false;
+
+    if(!NS.atrSeries){
+      NS.atrSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "atr", visible: ($("showATR")?.checked ?? true) });
+      try { sc.priceScale("atr").applyOptions({ scaleMargins: { top: 0.15, bottom: 0.05 } }); } catch(_){}
+    }
+    if(!NS.stochKSeries){
+      NS.stochKSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "stoch", visible: ($("showSTOCH")?.checked ?? true) });
+    }
+    if(!NS.stochDSeries){
+      NS.stochDSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "stoch", visible: ($("showSTOCH")?.checked ?? true) });
+      try { sc.priceScale("stoch").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } }); } catch(_){}
+    }
+    return true;
+  }
+
+  // -------- compute & update --------
+  function updateATRStoch(){
+    const ks = window.lastKs;
+    if(!Array.isArray(ks) || ks.length===0) return;
+    if(!ensureSeries()) return;
+
+    const atr = ATR(ks, 14);
+    const st  = Stochastic(ks, 14, 3, 3);
+
+    // cache for reapply when other toggles rebuild/affect scales
+    NS.cache = { ks, atr, stK: st.k, stD: st.d };
+
+    NS.atrSeries.setData(mapFiniteSeries(ks, atr));
+    NS.stochKSeries.setData(mapFiniteSeries(ks, st.k));
+    NS.stochDSeries.setData(mapFiniteSeries(ks, st.d));
+
+    // respect current toggles (default ON if not present)
+    const atrOn = $("showATR") ? $("showATR").checked : true;
+    const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
+    NS.atrSeries.applyOptions({ visible: atrOn });
+    NS.stochKSeries.applyOptions({ visible: stoOn });
+    NS.stochDSeries.applyOptions({ visible: stoOn });
+  }
+
+  // reapply after other toggles affect layout/visibility
+  function reapplyAll(){
+    if(!ensureSeries()) return;
+    const C = NS.cache;
+    const ks = window.lastKs;
+    if(C && ks){
+      if(C.atr && NS.atrSeries) NS.atrSeries.setData(mapFiniteSeries(ks, C.atr));
+      if(C.stK && NS.stochKSeries) NS.stochKSeries.setData(mapFiniteSeries(ks, C.stK));
+      if(C.stD && NS.stochDSeries) NS.stochDSeries.setData(mapFiniteSeries(ks, C.stD));
+    }
+    const atrOn = $("showATR") ? $("showATR").checked : true;
+    const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
+    NS.atrSeries && NS.atrSeries.applyOptions({ visible: atrOn });
+    NS.stochKSeries && NS.stochKSeries.applyOptions({ visible: stoOn });
+    NS.stochDSeries && NS.stochDSeries.applyOptions({ visible: stoOn });
+  }
+
+  // -------- wire into lifecycle (append-only) --------
+  const _build = window.buildCharts;
+  if(typeof _build === "function"){
+    window.buildCharts = function(...args){
+      const r = _build.apply(this, args);
+      try { ensureSeries(); reapplyAll(); } catch(e){ console.warn('[ATR/Stoch addon] ensure error', e); }
+      return r;
+    };
+  }
+  const _load = window.loadAll;
+  if(typeof _load === "function"){
+    window.loadAll = async function(...args){
+      const r = await _load.apply(this, args);
+      try { updateATRStoch(); } catch(e){ console.warn('[ATR/Stoch addon] update error', e); }
+      return r;
+    };
+  }
+
+  // listen to ANY checkbox change to reapply (coexist with other toggles)
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if(t && t.tagName === 'INPUT' && t.type === 'checkbox'){
+      setTimeout(() => { try { reapplyAll(); } catch(_){ } }, 0);
+    }
+  });
+
+  // initial
+  document.addEventListener('DOMContentLoaded', () => {
+    try { ensureSeries(); updateATRStoch(); } catch(_){}
+    const atrCk = $('showATR'); if(atrCk) atrCk.addEventListener('change', e => NS.atrSeries?.applyOptions({ visible: e.target.checked }));
+    const stoCk = $('showSTOCH'); if(stoCk) stoCk.addEventListener('change', e => { NS.stochKSeries?.applyOptions({ visible: e.target.checked }); NS.stochDSeries?.applyOptions({ visible: e.target.checked }); });
+  });
+})();
+/* ===== /ATR/STOCH ADDON ===== */
+</script>
+</body>
 </html>
