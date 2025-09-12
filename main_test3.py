@@ -232,65 +232,102 @@ def cvd_approx(klines: List[Dict[str, float]]):
 # =========================
 
 def detect_ob(klines: List[Dict[str, float]], lookback: int = 300, extend: int = 60):
-    """최근 캔들에서 OB(수요/공급) 존 근사 탐지.
-    - 기준 캔들(i) 이후 extend 구간에서 고가/저가 돌파 여부로 매수/매도 블록 후보를 만들고,
-      최소 높이(ATR 기반/비율 기반)를 강제하여 지나치게 얇은 박스를 보정.
-    - 중복/유사 박스는 병합하여 마지막 20개만 반환.
+    """BOS(구조 돌파) 기반의 간단 OB 존 탐지.
+    - 직전 스윙 고/저를 종가(또는 고/저)로 명확히 돌파(BOS)한 봉을 찾고,
+      그 직전에 존재하는 '마지막 반대색 캔들'의 고가~저가를 OB 존으로 지정.
+    - 너무 얇은 박스는 ATR/비율 기준으로 최소 높이를 보정.
+    - 중복/유사 박스는 병합하고 최근 20개만 반환.
     Returns: [{type,start,end,top,bottom}, ...]
     """
     n = len(klines)
-    if n < 5:
+    if n < 10:
         return []
     last_t = klines[-1]["t"]
-    start_i = max(1, n - (lookback + extend + 50))  # 과도한 전체 순회 방지
     zones: List[Dict[str, Any]] = []
+
+    # --- swing helpers ---
+    def is_swing_hi(idx: int, L: int=2, R: int=2) -> bool:
+        a = max(0, idx-L); b = min(n-1, idx+R)
+        hi = max(klines[j]["h"] for j in range(a, b+1))
+        return klines[idx]["h"] >= hi
+
+    def is_swing_lo(idx: int, L: int=2, R: int=2) -> bool:
+        a = max(0, idx-L); b = min(n-1, idx+R)
+        lo = min(klines[j]["l"] for j in range(a, b+1))
+        return klines[idx]["l"] <= lo
+
+    def last_swing(idx: int, up: bool=True, L: int=2, R: int=2) -> int:
+        for j in range(idx-1, max(-1, idx-100), -1):
+            if up and is_swing_hi(j, L, R): return j
+            if not up and is_swing_lo(j, L, R): return j
+        return -1
 
     atrs = atr(klines, 14)
 
     def min_height(price: float, atr_val: Optional[float]) -> float:
-        """박스 최소 높이(가격 비율 0.02% vs ATR의 10% 중 큰 값)."""
-        base = price * 0.0002
+        base = price * 0.0002  # 0.02%
         return max(base, (atr_val or 0) * 0.1)
 
-    for i in range(start_i, n - 1):
-        b = klines[i]
-        top = max(b["o"], b["c"], b["h"])
-        bottom = min(b["o"], b["c"], b["l"])
-        fut = klines[i + 1:min(i + 1 + extend, n)]
-        if not fut:
-            continue
+    BOS_BUF = 0.0005  # 0.05%
 
-        # [Bullish] 하락 캔들 이후 고가 돌파 → 수요블록 후보
-        if b["c"] < b["o"] and max(x["h"] for x in fut) >= b["h"]:
-            h = top - bottom
-            m = min_height(b["c"], atrs[i] if i < len(atrs) else None)
-            if h < m:
-                pad = (m - h) / 2
-                top += pad; bottom -= pad
-            zones.append({"type": "bullish", "start": b["t"], "end": last_t, "top": top, "bottom": bottom})
+    start_i = max(5, n - (lookback + extend + 50))
+    for k in range(start_i, n):
+        # ----- BOS UP -----
+        sH = last_swing(k, True, 2, 2)
+        if sH > 2:
+            swingHigh = klines[sH]["h"]
+            brokeUp = (klines[k]["c"] > swingHigh * (1 + BOS_BUF)) or (klines[k]["h"] > swingHigh * (1 + BOS_BUF))
+            if brokeUp:
+                # last bearish candle between sH and k
+                i0 = -1
+                for i in range(k, max(sH-1, start_i), -1):
+                    if klines[i]["c"] < klines[i]["o"]:
+                        i0 = i; break
+                if i0 != -1:
+                    b = klines[i0]
+                    top = max(b["o"], b["c"], b["h"])
+                    bottom = min(b["o"], b["c"], b["l"])
+                    # min height
+                    h = top - bottom
+                    m = min_height(b["c"], atrs[i0] if i0 < len(atrs) else None)
+                    if h < m:
+                        pad = (m - h) / 2
+                        top += pad; bottom -= pad
+                    zones.append({"type":"bullish", "start": b["t"], "end": last_t, "top": top, "bottom": bottom})
 
-        # [Bearish] 상승 캔들 이후 저가 돌파 → 공급블록 후보
-        if b["c"] > b["o"] and min(x["l"] for x in fut) <= b["l"]:
-            h = top - bottom
-            m = min_height(b["c"], atrs[i] if i < len(atrs) else None)
-            if h < m:
-                pad = (m - h) / 2
-                top += pad; bottom -= pad
-            zones.append({"type": "bearish", "start": b["t"], "end": last_t, "top": top, "bottom": bottom})
+        # ----- BOS DOWN -----
+        sL = last_swing(k, False, 2, 2)
+        if sL > 2:
+            swingLow = klines[sL]["l"]
+            brokeDn = (klines[k]["c"] < swingLow * (1 - BOS_BUF)) or (klines[k]["l"] < swingLow * (1 - BOS_BUF))
+            if brokeDn:
+                # last bullish candle between sL and k
+                i0 = -1
+                for i in range(k, max(sL-1, start_i), -1):
+                    if klines[i]["c"] > klines[i]["o"]:
+                        i0 = i; break
+                if i0 != -1:
+                    b = klines[i0]
+                    top = max(b["o"], b["c"], b["h"])
+                    bottom = min(b["o"], b["c"], b["l"])
+                    h = top - bottom
+                    m = min_height(b["c"], atrs[i0] if i0 < len(atrs) else None)
+                    if h < m:
+                        pad = (m - h) / 2
+                        top += pad; bottom -= pad
+                    zones.append({"type":"bearish", "start": b["t"], "end": last_t, "top": top, "bottom": bottom})
 
-    # 거의 같은 상/하단의 박스는 하나로 병합(유사도 판정)
+    # merge near-duplicates
     merged: List[Dict[str, Any]] = []
-
-    def almost_equal(a, b, tol=1e-4):
-        m = (abs(a) + abs(b)) / 2 or 1.0
-        return abs(a - b) / m < tol
-
+    def almost_equal(a: float, b: float, tol: float=1e-4):
+        m = (abs(a)+abs(b))/2 or 1.0
+        return abs(a-b)/m < tol
     for z in zones:
-        if any(z["type"] == m["type"] and almost_equal(z["top"], m["top"]) and almost_equal(z["bottom"], m["bottom"]) for m in merged):
-            continue
-        merged.append(z)
-
-    # 가장 최근 기준 20개만 반환(렌더 과부하 방지)
+        dup = False
+        for m in merged:
+            if z["type"]==m["type"] and almost_equal(z["top"], m["top"]) and almost_equal(z["bottom"], m["bottom"]):
+                dup = True; break
+        if not dup: merged.append(z)
     return merged[-20:]
 
 # =========================
@@ -578,7 +615,7 @@ def index(request: Request):
     - templates/ 디렉터리에 파일이 있어야 정상 렌더됩니다.
     """
     # return templates.TemplateResponse("index7.html", {"request": request})
-    return templates.TemplateResponse("index_test6.html", {"request": request})
+    return templates.TemplateResponse("index_test7.html", {"request": request})
 
 # ----- [APPEND-ONLY] Superchart helpers ----- #
 from fastapi import Query  # (원본 유지용 재-import)

@@ -392,7 +392,10 @@
       let playing = false,
         replayTimer = null;
 
-      /* ===== Indicators ===== */
+      
+      // Track if user has zoomed/panned and remember last range
+      let userInteracted = false, lastVisibleRange = null; let __isRestoring = false, __isSyncing = false;
+/* ===== Indicators ===== */
       const EMA = (arr, L) => {
         const k = 2 / (L + 1);
         let p = null;
@@ -412,6 +415,9 @@
           cpv += tp * k.v;
           cv += k.v;
           return cv ? cpv / cv : tp;
+        
+          // restore previous view after strategy markers update
+          try { if (__prevRange__ && isFinite(__prevRange__.from) && isFinite(__prevRange__.to)) mainChart.timeScale().setVisibleLogicalRange(__prevRange__); } catch(_){}
         });
       };
       // Added: SMA / ATR / Stochastic
@@ -475,6 +481,17 @@
           s = $("chartSub"),
           ovM = $("overlayMain"),
           ovS = $("overlaySub");
+        // mark user interaction on mouse/touch to preserve zoom/pan
+        const __markInteract = () => { 
+          try { userInteracted = true; lastVisibleRange = mainChart?.timeScale().getVisibleLogicalRange() || lastVisibleRange; } catch(_){}
+        };
+        m.addEventListener('wheel', __markInteract, { passive: true });
+        m.addEventListener('mousedown', __markInteract);
+        m.addEventListener('touchstart', __markInteract, { passive: true });
+        s.addEventListener('wheel', __markInteract, { passive: true });
+        s.addEventListener('mousedown', __markInteract);
+        s.addEventListener('touchstart', __markInteract, { passive: true });
+
         mainChart = LightweightCharts.createChart(m, {
           width: m.clientWidth,
           height: m.clientHeight,
@@ -602,15 +619,25 @@ const resize = () => {
         new ResizeObserver(resize).observe(m);
         new ResizeObserver(resize).observe(s);
 
-        // sync panes
-        const sync = (a, b) =>
-          a.timeScale().subscribeVisibleLogicalRangeChange((r) => {
-            if (r) b.timeScale().setVisibleLogicalRange(r);
-          });
+        
+        // sync panes (guarded) & track user-driven range changes
+        const onRange = (r) => {
+          if (!r || __isRestoring || __isSyncing) return;
+          try { lastVisibleRange = r; userInteracted = true; } catch(_){}
+        };
+        const sync = (a, b) => a.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+          if (!r) return;
+          if (__isRestoring) { onRange(r); return; }
+          if (__isSyncing) return;
+          __isSyncing = true;
+          try {
+            b.timeScale().setVisibleLogicalRange(r);
+            onRange(r);
+          } finally { __isSyncing = false; }
+        });
         sync(mainChart, subChart);
         sync(subChart, mainChart);
-
-        // crosshair HUD
+// crosshair HUD
         mainChart.subscribeCrosshairMove((p) => {
           if (!p?.time) {
             $("hud_data").textContent = "-";
@@ -631,8 +658,21 @@ const resize = () => {
         mainChart.timeScale().subscribeVisibleTimeRangeChange(drawAll);
 
         // mouse events on chart container (NOT overlay)
-        wireMouse(m);
-      }
+        
+
+        // Track user interaction (zoom/pan) to preserve view on auto updates
+        const markInteract = () => {
+          try {
+            userInteracted = true;
+            lastVisibleRange = mainChart.timeScale().getVisibleLogicalRange();
+          } catch (_) {}
+        };
+        m.addEventListener('wheel', markInteract, { passive: true });
+        m.addEventListener('mousedown', markInteract);
+        s.addEventListener('wheel', markInteract, { passive: true });
+        s.addEventListener('mousedown', markInteract);
+
+}
 
       /* ===== Coordinate helpers (CSS px) ===== */
       const timeToCssX = (chart, t) => chart.timeScale().timeToCoordinate(t);
@@ -683,6 +723,8 @@ const resize = () => {
       }
       
       function drawZones(ctx) {
+        // Only include candles related to the OB (anchored dynamic band)
+        const EXPAND_OB_TOUCH_ONLY = true;
         const obToggle = document.getElementById("showOB");
         if ((obToggle && !obToggle.checked) || !zones.length) return;
 
@@ -692,15 +734,159 @@ const resize = () => {
         const bearBorder = css("--ob-bear");
 
         // 세로 간격 오프셋(px)
-        const spacing = 6 * d; 
+        const spacing = 0; 
 
         const list = [...zones].sort((a, b) => a.end - b.end);
 
         list.forEach((z, idx) => {
           let x1 = timeToCssX(mainChart, z.start),
+
               x2 = timeToCssX(mainChart, z.end);
+
           let yTop = priceToCssY(candleSeries, z.top),
+
               yBot = priceToCssY(candleSeries, z.bottom);
+
+
+          // Anchored dynamic band: only candles truly related to this OB
+
+          if (EXPAND_OB_TOUCH_ONLY && Array.isArray(lastKs) && lastKs.length) {
+
+            const t0 = Math.min(z.start, z.end);
+
+            const t1 = Math.max(z.start, z.end);
+
+            const baseHi = Math.max(z.top, z.bottom);
+
+            const baseLo = Math.min(z.top, z.bottom);
+
+            const baseH = Math.max(1e-9, baseHi - baseLo);
+
+            const originTime = (z.origin ?? z.start);
+
+
+            // tolerance: 0.3% of band height or ~2.5px in price units
+
+            let pxTol = 0;
+
+            try {
+
+              const p0 = candleSeries.coordinateToPrice(0);
+
+              const p1 = candleSeries.coordinateToPrice(2.5);
+
+              if (Number.isFinite(p0) && Number.isFinite(p1)) pxTol = Math.abs(p1 - p0);
+
+            } catch(_) { }
+
+            const tol = Math.max(baseH * 0.003, pxTol || 1e-9);
+
+            const EXPANSION_CAP = 1.25; // limit vertical growth
+
+
+            // indices within time window
+
+            const idxs = [];
+
+            for (let ii = 0; ii < lastKs.length; ii++) {
+
+              const t = lastKs[ii].t;
+
+              if (t < t0 || t > t1) continue;
+
+              idxs.push(ii);
+
+            }
+
+
+            if (idxs.length) {
+
+              // first index at/after origin
+
+              let startIdx = idxs[0];
+
+              for (let k = 0; k < idxs.length; k++) {
+
+                if (lastKs[idxs[k]].t >= originTime) { startIdx = idxs[k]; break; }
+
+              }
+
+              const maxGap = 3;
+
+              let gap = 0;
+
+              let ia = null, ib = null;
+
+              let bandHi = baseHi, bandLo = baseLo;
+
+              for (let k = idxs.indexOf(startIdx); k < idxs.length; k++) {
+
+                const i2 = idxs[k];
+
+                const c = lastKs[i2];
+
+                const mid = (c.h + c.l) / 2;
+
+                const overlapsNow = !(c.h < (bandLo - tol) || c.l > (bandHi + tol)) || (mid >= bandLo - tol && mid <= bandHi + tol);
+
+                if (overlapsNow) {
+
+                  const candHi = Math.max(bandHi, c.h);
+
+                  const candLo = Math.min(bandLo, c.l);
+
+                  const stillAnchored = !(candHi < (baseLo - tol) || candLo > (baseHi + tol));
+
+                  const withinCap = (candHi - candLo) <= baseH * EXPANSION_CAP;
+
+                  if (stillAnchored && withinCap) {
+
+                    if (ia === null) ia = i2;
+
+                    ib = i2;
+
+                    bandHi = candHi;
+
+                    bandLo = candLo;
+
+                    gap = 0;
+
+                    continue;
+
+                  }
+
+                }
+
+                gap += 1;
+
+                if (ia !== null && gap > maxGap) break;
+
+              }
+
+              if (ia === null || ib === null) {
+
+                const oi = lastKs.findIndex(k => k.t === originTime);
+
+                if (oi !== -1) { ia = ib = oi; bandHi = lastKs[oi].h; bandLo = lastKs[oi].l; }
+
+              }
+
+              if (ia !== null && ib !== null) {
+
+                x1 = timeToCssX(mainChart, lastKs[ia].t);
+
+                x2 = timeToCssX(mainChart, lastKs[ib].t);
+
+                yTop = priceToCssY(candleSeries, bandHi);
+
+                yBot = priceToCssY(candleSeries, bandLo);
+
+              }
+
+            }
+
+          }
+
 
           if (x1 == null && x2 == null) return;
           if (x1 == null) x1 = 0;
@@ -1117,6 +1303,10 @@ const resize = () => {
       }catch(e){ console.warn('[reapplyStochAtr]', e); }
     }
     async function loadAll() {
+        // Snapshot current view before data updates
+        let __snapshotRange = null;
+        try { __snapshotRange = lastVisibleRange || (userInteracted ? mainChart.timeScale().getVisibleLogicalRange() : null); } catch(_){}
+
         const symbol = $("symbol").value.trim().toUpperCase();
         const interval = $("interval").value;
 
@@ -1132,9 +1322,8 @@ const resize = () => {
             close: k.c,
           }))
         );
-        mainChart.timeScale().fitContent();
-
-        const closes = lastKs.map((k) => k.c);
+        // fitContent disabled here — will be handled conditionally at the end of loadAll()
+const closes = lastKs.map((k) => k.c);
         vwapArr = VWAP(lastKs);
         temaArr = TEMA(closes, 30);
         rsiArr = RSI(closes, 14);
@@ -1177,10 +1366,28 @@ const resize = () => {
         if (atrSeries)  atrSeries.applyOptions({ visible: $("showATR")?.checked ?? false });
         if (stochKSeries) stochKSeries.applyOptions({ visible: $("showSTOCH")?.checked ?? false });
         if (stochDSeries) stochDSeries.applyOptions({ visible: $("showSTOCH")?.checked ?? false });
-        await refreshZones({ forceServer: true });
-        await refreshHUD();
-        if (typeof updateLocalHUD==="function") updateLocalHUD();
-        reapplyStochAtr();
+        
+        
+        // Ensure OB zones are (re)computed and drawn on each load
+        try {
+          if ($("showOB")?.checked) {
+            await refreshZones({ forceServer: true });
+          } else {
+            zones = [];
+          }
+        } catch (e) { console.warn('[zones @loadAll]', e); }
+// === Preserve current zoom/pan if the user interacted; otherwise fit once ===
+        try {
+          const prevRange = __snapshotRange;
+          if (prevRange && isFinite(prevRange.from) && isFinite(prevRange.to)) {
+            __isRestoring = true;
+            mainChart.timeScale().setVisibleLogicalRange(prevRange);
+            subChart.timeScale().setVisibleLogicalRange(prevRange);
+            __isRestoring = false;
+          } else {
+            mainChart.timeScale().fitContent();
+          }
+        } catch (e) { console.warn('[view restore @loadAll]', e); }
         drawAll();
       }
       async function refreshHUD() {
@@ -1459,7 +1666,11 @@ window.addEventListener("DOMContentLoaded", async () => {
         });
 $("loadBtn").addEventListener("click", loadAll);
         $("runStratBtn").addEventListener("click", async () => {
-          const symbol = $("symbol").value.trim().toUpperCase();
+          
+          // capture current view before strategy re-run
+          let __prevRange__ = null;
+          try { __prevRange__ = lastVisibleRange || (userInteracted ? mainChart.timeScale().getVisibleLogicalRange() : null); } catch(_) {}
+    const symbol = $("symbol").value.trim().toUpperCase();
           const interval = $("interval").value;
           await fetch(
             api(
@@ -1497,7 +1708,10 @@ $("loadBtn").addEventListener("click", loadAll);
 
         // keyboard
         window.addEventListener("keydown", (e) => {
-          if (e.key === "Delete" && selectedId) {
+          
+          // mark user interaction on keyboard ops that change view
+          try { userInteracted = true; lastVisibleRange = mainChart.timeScale().getVisibleLogicalRange(); } catch(_){}
+    if (e.key === "Delete" && selectedId) {
             pushUndo();
             drawings = drawings.filter((d) => d.id !== selectedId);
             selectedId = null;
