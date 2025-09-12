@@ -1095,32 +1095,8 @@ const resize = () => {
           zones = srv;
         } else if (lastKs.length) {
           // fallback
-          const out = [];
-          const start = Math.max(1, lastKs.length - 800);
-          for (let i = start; i < lastKs.length - 1; i++) {
-            const b = lastKs[i],
-              fut = lastKs.slice(i + 1, Math.min(i + 151, lastKs.length));
-            if (!fut.length) continue;
-            const top = Math.max(b.o, b.c, b.h),
-              bottom = Math.min(b.o, b.c, b.l);
-            if (b.c < b.o && fut.some((x) => x.h >= b.h))
-              out.push({
-                type: "bullish",
-                start: b.t,
-                end: lastKs.at(-1).t,
-                top,
-                bottom,
-              });
-            if (b.c > b.o && fut.some((x) => x.l <= b.l))
-              out.push({
-                type: "bearish",
-                start: b.t,
-                end: lastKs.at(-1).t,
-                top,
-                bottom,
-              });
-          }
-          zones = out.slice(-20);
+          // Use BOS-based fallback detection (swing break → last opposing candle)
+          zones = detectZonesFallbackBOS(lastKs, 500, 150);
         }
         zones = mergeZones(zones, { iou: 0.2 });
         drawAll();

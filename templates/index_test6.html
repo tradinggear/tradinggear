@@ -723,6 +723,8 @@ const resize = () => {
       }
       
       function drawZones(ctx) {
+        // Only include candles related to the OB (anchored dynamic band)
+        const EXPAND_OB_TOUCH_ONLY = true;
         const obToggle = document.getElementById("showOB");
         if ((obToggle && !obToggle.checked) || !zones.length) return;
 
@@ -738,9 +740,153 @@ const resize = () => {
 
         list.forEach((z, idx) => {
           let x1 = timeToCssX(mainChart, z.start),
+
               x2 = timeToCssX(mainChart, z.end);
+
           let yTop = priceToCssY(candleSeries, z.top),
+
               yBot = priceToCssY(candleSeries, z.bottom);
+
+
+          // Anchored dynamic band: only candles truly related to this OB
+
+          if (EXPAND_OB_TOUCH_ONLY && Array.isArray(lastKs) && lastKs.length) {
+
+            const t0 = Math.min(z.start, z.end);
+
+            const t1 = Math.max(z.start, z.end);
+
+            const baseHi = Math.max(z.top, z.bottom);
+
+            const baseLo = Math.min(z.top, z.bottom);
+
+            const baseH = Math.max(1e-9, baseHi - baseLo);
+
+            const originTime = (z.origin ?? z.start);
+
+
+            // tolerance: 0.3% of band height or ~2.5px in price units
+
+            let pxTol = 0;
+
+            try {
+
+              const p0 = candleSeries.coordinateToPrice(0);
+
+              const p1 = candleSeries.coordinateToPrice(2.5);
+
+              if (Number.isFinite(p0) && Number.isFinite(p1)) pxTol = Math.abs(p1 - p0);
+
+            } catch(_) { }
+
+            const tol = Math.max(baseH * 0.003, pxTol || 1e-9);
+
+            const EXPANSION_CAP = 1.25; // limit vertical growth
+
+
+            // indices within time window
+
+            const idxs = [];
+
+            for (let ii = 0; ii < lastKs.length; ii++) {
+
+              const t = lastKs[ii].t;
+
+              if (t < t0 || t > t1) continue;
+
+              idxs.push(ii);
+
+            }
+
+
+            if (idxs.length) {
+
+              // first index at/after origin
+
+              let startIdx = idxs[0];
+
+              for (let k = 0; k < idxs.length; k++) {
+
+                if (lastKs[idxs[k]].t >= originTime) { startIdx = idxs[k]; break; }
+
+              }
+
+              const maxGap = 3;
+
+              let gap = 0;
+
+              let ia = null, ib = null;
+
+              let bandHi = baseHi, bandLo = baseLo;
+
+              for (let k = idxs.indexOf(startIdx); k < idxs.length; k++) {
+
+                const i2 = idxs[k];
+
+                const c = lastKs[i2];
+
+                const mid = (c.h + c.l) / 2;
+
+                const overlapsNow = !(c.h < (bandLo - tol) || c.l > (bandHi + tol)) || (mid >= bandLo - tol && mid <= bandHi + tol);
+
+                if (overlapsNow) {
+
+                  const candHi = Math.max(bandHi, c.h);
+
+                  const candLo = Math.min(bandLo, c.l);
+
+                  const stillAnchored = !(candHi < (baseLo - tol) || candLo > (baseHi + tol));
+
+                  const withinCap = (candHi - candLo) <= baseH * EXPANSION_CAP;
+
+                  if (stillAnchored && withinCap) {
+
+                    if (ia === null) ia = i2;
+
+                    ib = i2;
+
+                    bandHi = candHi;
+
+                    bandLo = candLo;
+
+                    gap = 0;
+
+                    continue;
+
+                  }
+
+                }
+
+                gap += 1;
+
+                if (ia !== null && gap > maxGap) break;
+
+              }
+
+              if (ia === null || ib === null) {
+
+                const oi = lastKs.findIndex(k => k.t === originTime);
+
+                if (oi !== -1) { ia = ib = oi; bandHi = lastKs[oi].h; bandLo = lastKs[oi].l; }
+
+              }
+
+              if (ia !== null && ib !== null) {
+
+                x1 = timeToCssX(mainChart, lastKs[ia].t);
+
+                x2 = timeToCssX(mainChart, lastKs[ib].t);
+
+                yTop = priceToCssY(candleSeries, bandHi);
+
+                yBot = priceToCssY(candleSeries, bandLo);
+
+              }
+
+            }
+
+          }
+
 
           if (x1 == null && x2 == null) return;
           if (x1 == null) x1 = 0;

@@ -578,7 +578,7 @@ def index(request: Request):
     - templates/ 디렉터리에 파일이 있어야 정상 렌더됩니다.
     """
     # return templates.TemplateResponse("index7.html", {"request": request})
-    return templates.TemplateResponse("index_test4.html", {"request": request})
+    return templates.TemplateResponse("index_test5.html", {"request": request})
 
 # ----- [APPEND-ONLY] Superchart helpers ----- #
 from fastapi import Query  # (원본 유지용 재-import)
