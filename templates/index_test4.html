@@ -902,20 +902,20 @@
           // === 내부 채우기 (조금 더 진하게) ===
           ctx.save();
           ctx.fillStyle = isBull
-            ? "rgba(0, 255, 0, 0.14)" // 초록 원색 + 살짝 연하게
-            : "rgba(255, 0, 0, 0.14)"; // 빨강 원색 + 살짝 연하게
+            ? "rgba(0, 255, 0, 0.12)" // 초록 원색 + 살짝 연하게
+            : "rgba(255, 0, 0, 0.12)"; // 빨강 원색 + 살짝 연하게
           ctx.fillRect(L, T, W, H);
           ctx.restore();
 
           // === 외곽선 (선명하게) ===
-          // ctx.save();
-          // ctx.lineWidth = 1.6 * d;
-          // ctx.strokeStyle = isBull
-          //   ? "rgba(56, 189, 148, 0.3)"
-          //   : "rgba(244, 63, 94, 0.3)";
-          // ctx.setLineDash([]);
-          // ctx.strokeRect(L + 0.5 * d, T + 0.5 * d, W - 1 * d, H - 1 * d);
-          // ctx.restore();
+          ctx.save();
+          ctx.lineWidth = 1.0 * d;
+          ctx.strokeStyle = isBull
+            ? "rgba(56, 189, 148, 0.7)"
+            : "rgba(244, 63, 94, 0.7)";
+          ctx.setLineDash([]);
+          ctx.strokeRect(L + 0.5 * d, T + 0.5 * d, W - 1 * d, H - 1 * d);
+          ctx.restore();
 
           // === 상/하단 실선 ===
           // ctx.save();
