@@ -112,6 +112,31 @@
         padding: 6px 10px;
         min-width: 120px;
       }
+      .group {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 6px;
+      }
+
+      .hud-inline {
+        display: flex;
+        gap: 6px;
+      }
+
+      .hud-inline .card {
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 4px 8px;
+        font-size: 12px;
+        text-align: center;
+        min-width: 80px;
+      }
+
       .charts {
         display: grid;
         grid-template-rows: 2.5fr 1fr;
@@ -204,12 +229,21 @@
           <label class="small"
             ><input type="checkbox" id="showTEMA" checked /> TEMA(30)</label
           >
-          
-          <label class="small"><input type="checkbox" id="showMA" checked /> MA(20)</label>
-          <label class="small"><input type="checkbox" id="showEMA" checked /> EMA(50)</label>
-          <label class="small"><input type="checkbox" id="showATR" checked /> ATR(14)</label>
-          <label class="small"><input type="checkbox" id="showSTOCH" checked /> Stoch(14,3,3)</label>
-<label class="small"
+
+          <label class="small"
+            ><input type="checkbox" id="showMA" checked /> MA(20)</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showEMA" checked /> EMA(50)</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showATR" checked /> ATR(14)</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showSTOCH" checked />
+            Stoch(14,3,3)</label
+          >
+          <label class="small"
             ><input type="checkbox" id="showOB" checked /> OB(초록/빨강)</label
           >
           <label class="small"
@@ -244,16 +278,37 @@
           <button class="toolbtn" id="pngBtn">PNG(β)</button>
         </div>
 
+        <!-- 비교 input+버튼만 감싸는 그룹 -->
         <div class="group">
-          <label
-            >비교
-            <input id="cmpSymbol" placeholder="BTCUSDT" style="width: 120px"
-          /></label>
+          <label class="small">
+            비교
+            <input id="cmpSymbol" placeholder="BTCUSDT" style="width: 120px" />
+          </label>
           <button id="cmpBtn">추가/갱신</button>
           <span class="small">기준=100</span>
         </div>
 
-        <div class="group">
+        <!-- 비교 그룹 옆에 HUD 카드 배치 -->
+        <div class="hud-inline">
+          <div class="card">
+            <div>가격</div>
+            <div id="hud_price">-</div>
+          </div>
+          <div class="card">
+            <div>TEMA(30)</div>
+            <div id="hud_tema">-</div>
+          </div>
+          <div class="card">
+            <div>ATR(14)</div>
+            <div id="hud_atr">-</div>
+          </div>
+          <div class="card">
+            <div>CVD</div>
+            <div id="hud_cvd">-</div>
+          </div>
+        </div>
+
+        <div class="group" style="display: none">
           <label class="small"
             >바수
             <input type="range" id="rangeBars" min="50" max="500" value="300"
@@ -271,7 +326,7 @@
       </header>
 
       <!-- HUD -->
-      <div class="hud" id="hud">
+      <div class="hud" id="hud" style="display: none">
         <div class="card">
           <div>가격</div>
           <div id="hud_price">-</div>
@@ -371,7 +426,11 @@
         cvdSeries,
         cmpSeries;
       let maSeries, emaSeries, atrSeries, stochKSeries, stochDSeries;
-      let maArr = [], emaArr = [], atrArr = [], stochK = [], stochD = [];
+      let maArr = [],
+        emaArr = [],
+        atrArr = [],
+        stochK = [],
+        stochD = [];
       let lastKs = [],
         vwapArr = [],
         temaArr = [],
@@ -391,6 +450,12 @@
         redoStack = [];
       let playing = false,
         replayTimer = null;
+
+      // 사용자 인터렉션 기억
+      let userInteracted = false, // 사용자가 직접 차트를 조작(줌/팬)했는지 여부
+        lastVisibleRange = null; // 마지막으로 보고 있던 차트 구간(뷰포트 범위) 저장
+      let __isRestoring = false, // 저장된 구간을 복원 중인지 여부 (복원 중엔 userInteracted 무시)
+        __isSyncing = false; // 다른 차트들과 구간 동기화 중인지 여부 (동기화 중엔 userInteracted 무시)
 
       /* ===== Indicators ===== */
       const EMA = (arr, L) => {
@@ -416,25 +481,66 @@
       };
       // Added: SMA / ATR / Stochastic
       const SMA = (arr, L) => {
-        let sum=0; const out=Array(arr.length).fill(null);
-        for(let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=L) sum-=arr[i-L]; if(i>=L-1) out[i]=sum/L; }
+        let sum = 0;
+        const out = Array(arr.length).fill(null);
+        for (let i = 0; i < arr.length; i++) {
+          sum += arr[i];
+          if (i >= L) sum -= arr[i - L];
+          if (i >= L - 1) out[i] = sum / L;
+        }
         return out;
       };
-      const ATR = (ks, L=14) => {
-        const out=Array(ks.length).fill(null); let prevClose=null, acc=0, q=[];
-        const tr=ks.map(k=>{ const t=prevClose==null? (k.h-k.l):Math.max(k.h-k.l, Math.abs(k.h-prevClose), Math.abs(k.l-prevClose)); prevClose=k.c; return t; });
-        for(let i=0;i<tr.length;i++){ q.push(tr[i]); acc+=tr[i]; if(i>=L){ acc-=q.shift(); } if(i>=L-1) out[i]=acc/L; } return out;
-      };
-      const Stochastic = (ks, L=14, K=3, D=3) => {
-        const kRaw=Array(ks.length).fill(null);
-        for(let i=0;i<ks.length;i++){
-          const from=Math.max(0,i-L+1); let hi=-Infinity, lo=Infinity;
-          for(let j=from;j<=i;j++){ if(ks[j].h>hi) hi=ks[j].h; if(ks[j].l<lo) lo=ks[j].l; }
-          if(i>=L-1){ const den=hi-lo; kRaw[i]=den===0?50:((ks[i].c-lo)/den)*100; }
+      const ATR = (ks, L = 14) => {
+        const out = Array(ks.length).fill(null);
+        let prevClose = null,
+          acc = 0,
+          q = [];
+        const tr = ks.map((k) => {
+          const t =
+            prevClose == null
+              ? k.h - k.l
+              : Math.max(
+                  k.h - k.l,
+                  Math.abs(k.h - prevClose),
+                  Math.abs(k.l - prevClose)
+                );
+          prevClose = k.c;
+          return t;
+        });
+        for (let i = 0; i < tr.length; i++) {
+          q.push(tr[i]);
+          acc += tr[i];
+          if (i >= L) {
+            acc -= q.shift();
+          }
+          if (i >= L - 1) out[i] = acc / L;
         }
-        const kSmooth = SMA(kRaw.map(x=>x??0), K).map((v,i)=>kRaw[i]==null?null:v);
-        const dArr    = SMA(kSmooth.map(x=>x??0), D).map((v,i)=>kSmooth[i]==null?null:v);
-        return { k:kSmooth, d:dArr };
+        return out;
+      };
+      const Stochastic = (ks, L = 14, K = 3, D = 3) => {
+        const kRaw = Array(ks.length).fill(null);
+        for (let i = 0; i < ks.length; i++) {
+          const from = Math.max(0, i - L + 1);
+          let hi = -Infinity,
+            lo = Infinity;
+          for (let j = from; j <= i; j++) {
+            if (ks[j].h > hi) hi = ks[j].h;
+            if (ks[j].l < lo) lo = ks[j].l;
+          }
+          if (i >= L - 1) {
+            const den = hi - lo;
+            kRaw[i] = den === 0 ? 50 : ((ks[i].c - lo) / den) * 100;
+          }
+        }
+        const kSmooth = SMA(
+          kRaw.map((x) => x ?? 0),
+          K
+        ).map((v, i) => (kRaw[i] == null ? null : v));
+        const dArr = SMA(
+          kSmooth.map((x) => x ?? 0),
+          D
+        ).map((v, i) => (kSmooth[i] == null ? null : v));
+        return { k: kSmooth, d: dArr };
       };
       function RSI(cl, L = 14) {
         let g = 0,
@@ -471,10 +577,35 @@
 
       /* ===== Chart Build ===== */
       function buildCharts() {
+        // console.log("콘솔이 나오기는 하니");
         const m = $("chartMain"),
           s = $("chartSub"),
           ovM = $("overlayMain"),
           ovS = $("overlaySub");
+
+        // ────────────────────────────────────────────────
+        // 🖱️ 마우스/터치 등 사용자 상호작용 감지 → 줌/팬 유지용
+        // ────────────────────────────────────────────────
+        const __markInteract = () => {
+          try {
+            userInteracted = true;
+            // 현재 차트의 가시 범위를 저장 → 이후 데이터 갱신 시 뷰 유지
+            lastVisibleRange =
+              mainChart?.timeScale().getVisibleLogicalRange() ||
+              lastVisibleRange;
+          } catch (_) {}
+        };
+        m.addEventListener("wheel", __markInteract, { passive: true });
+        m.addEventListener("mousedown", __markInteract);
+        m.addEventListener("touchstart", __markInteract, { passive: true });
+        s.addEventListener("wheel", __markInteract, { passive: true });
+        s.addEventListener("mousedown", __markInteract);
+        s.addEventListener("touchstart", __markInteract, { passive: true });
+
+        // ────────────────────────────────────────────────
+        // 📊 메인 차트(mainChart) 생성
+        // ────────────────────────────────────────────────
+
         mainChart = LightweightCharts.createChart(m, {
           width: m.clientWidth,
           height: m.clientHeight,
@@ -494,6 +625,11 @@
           rightPriceScale: { borderColor: css("--line") },
           crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
+
+        // ────────────────────────────────────────────────
+        // 📊 서브 차트(subChart) 생성
+        // ────────────────────────────────────────────────
+
         subChart = LightweightCharts.createChart(s, {
           width: s.clientWidth,
           height: s.clientHeight,
@@ -514,8 +650,9 @@
           crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
 
-        
-        
+        // ────────────────────────────────────────────────
+        // 📈 메인 차트 시리즈 추가 (캔들, 이동평균선 등)
+        // ────────────────────────────────────────────────
         candleSeries = mainChart.addCandlestickSeries({
           upColor: css("--buy"),
           downColor: css("--sell"),
@@ -536,21 +673,20 @@
           priceScaleId: "right",
           visible: $("showTEMA").checked,
         });
-        maSeries   = mainChart.addLineSeries({
+        maSeries = mainChart.addLineSeries({
           lineWidth: 1,
           priceScaleId: "right",
           visible: $("showMA")?.checked ?? false,
         });
-        emaSeries  = mainChart.addLineSeries({
+        emaSeries = mainChart.addLineSeries({
           lineWidth: 1,
           priceScaleId: "right",
           visible: $("showEMA")?.checked ?? false,
         });
 
         // Sub-chart series
-// Sub-chart series
-        
-        
+        // Sub-chart series
+
         volSeries = subChart.addHistogramSeries({
           color: css("--muted"),
           priceFormat: { type: "volume" },
@@ -584,7 +720,11 @@
           priceScaleId: "stoch",
           visible: $("showSTOCH")?.checked ?? false,
         });
-const resize = () => {
+
+        // ────────────────────────────────────────────────
+        // 📐 리사이즈 대응 (창 크기 변경 시 차트/오버레이 크기 재조정)
+        // ────────────────────────────────────────────────
+        const resize = () => {
           const d = DPR();
           [
             [m, ovM, mainChart],
@@ -602,10 +742,32 @@ const resize = () => {
         new ResizeObserver(resize).observe(m);
         new ResizeObserver(resize).observe(s);
 
+        // ────────────────────────────────────────────────
+        // 🔗 메인/서브 차트의 가로 스크롤/줌 범위 동기화
+        // ────────────────────────────────────────────────
+        const onRange = (r) => {
+          if (!r || __isRestoring || __isSyncing) return;
+          try {
+            lastVisibleRange = r;
+            userInteracted = true;
+          } catch (_) {}
+        };
         // sync panes
         const sync = (a, b) =>
           a.timeScale().subscribeVisibleLogicalRangeChange((r) => {
-            if (r) b.timeScale().setVisibleLogicalRange(r);
+            if (!r) return;
+            if (__isRestoring) {
+              onRange(r);
+              return;
+            }
+            if (__isSyncing) return;
+            __isSyncing = true;
+            try {
+              b.timeScale().setVisibleLogicalRange(r);
+              onRange(r);
+            } finally {
+              __isSyncing = false;
+            }
           });
         sync(mainChart, subChart);
         sync(subChart, mainChart);
@@ -632,6 +794,20 @@ const resize = () => {
 
         // mouse events on chart container (NOT overlay)
         wireMouse(m);
+
+        // ────────────────────────────────────────────────
+        // ⚡ 사용자 상호작용 감지 (줌/팬 시 뷰 유지용)
+        // ────────────────────────────────────────────────
+        const markInteract = () => {
+          try {
+            userInteracted = true;
+            lastVisibleRange = mainChart.timeScale().getVisibleLogicalRange();
+          } catch (_) {}
+        };
+        m.addEventListener("wheel", markInteract, { passive: true });
+        m.addEventListener("mousedown", markInteract);
+        s.addEventListener("wheel", markInteract, { passive: true });
+        s.addEventListener("mousedown", markInteract);
       }
 
       /* ===== Coordinate helpers (CSS px) ===== */
@@ -681,7 +857,8 @@ const resize = () => {
         }
         return out;
       }
-      
+
+      // 기존 OBzone 드로잉
       function drawZones(ctx) {
         const obToggle = document.getElementById("showOB");
         if ((obToggle && !obToggle.checked) || !zones.length) return;
@@ -691,16 +868,14 @@ const resize = () => {
         const bullBorder = css("--ob-bull");
         const bearBorder = css("--ob-bear");
 
-        // 세로 간격 오프셋(px)
-        const spacing = 6 * d; 
-
+        const spacing = 0;
         const list = [...zones].sort((a, b) => a.end - b.end);
 
-        list.forEach((z, idx) => {
+        list.forEach((z) => {
           let x1 = timeToCssX(mainChart, z.start),
-              x2 = timeToCssX(mainChart, z.end);
+            x2 = timeToCssX(mainChart, z.end);
           let yTop = priceToCssY(candleSeries, z.top),
-              yBot = priceToCssY(candleSeries, z.bottom);
+            yBot = priceToCssY(candleSeries, z.bottom);
 
           if (x1 == null && x2 == null) return;
           if (x1 == null) x1 = 0;
@@ -708,79 +883,81 @@ const resize = () => {
           if (yTop == null) yTop = 0;
           if (yBot == null) yBot = cv.clientHeight;
 
-          x1 *= d; x2 *= d; yTop *= d; yBot *= d;
-
-          // === 간격 적용 ===
-          yTop -= spacing;   // 위로 올림
-          yBot += spacing;   // 아래로 내림
+          x1 *= d;
+          x2 *= d;
+          yTop *= d;
+          yBot *= d;
+          yTop -= spacing;
+          yBot += spacing;
 
           const L = Math.min(x1, x2),
-                R = Math.max(x1, x2),
-                T = Math.min(yTop, yBot),
-                B = Math.max(yTop, yBot),
-                W = Math.max(1, R - L),
-                H = Math.max(1, B - T);
+            R = Math.max(x1, x2),
+            T = Math.min(yTop, yBot),
+            B = Math.max(yTop, yBot),
+            W = Math.max(1, R - L),
+            H = Math.max(1, B - T);
 
           const isBull = z.type === "bullish";
-          const border = isBull ? bullBorder : bearBorder;
 
-          // 채우기
+          // === 내부 채우기 (조금 더 진하게) ===
           ctx.save();
-          ctx.fillStyle = isBull ? "rgba(56, 189, 148, 0.18)" : "rgba(244, 63, 94, 0.18)";
-          ctx.fillRect(L, T, W, H);
-          ctx.globalCompositeOperation = "multiply";
-          ctx.fillStyle = "rgba(6, 12, 24, 0.35)";
+          ctx.fillStyle = isBull
+            ? "rgba(0, 255, 0, 0.14)" // 초록 원색 + 살짝 연하게
+            : "rgba(255, 0, 0, 0.14)"; // 빨강 원색 + 살짝 연하게
           ctx.fillRect(L, T, W, H);
           ctx.restore();
 
-          // 외곽선
-          ctx.save();
-          ctx.lineWidth = 1.6 * d;
-          ctx.strokeStyle = border;
-          ctx.setLineDash([]);
-          ctx.strokeRect(L + 0.5 * d, T + 0.5 * d, W - 1 * d, H - 1 * d);
-          ctx.restore();
+          // === 외곽선 (선명하게) ===
+          // ctx.save();
+          // ctx.lineWidth = 1.6 * d;
+          // ctx.strokeStyle = isBull
+          //   ? "rgba(56, 189, 148, 0.3)"
+          //   : "rgba(244, 63, 94, 0.3)";
+          // ctx.setLineDash([]);
+          // ctx.strokeRect(L + 0.5 * d, T + 0.5 * d, W - 1 * d, H - 1 * d);
+          // ctx.restore();
 
-          // 점선(상/하단)
-          ctx.save();
-          ctx.lineWidth = 1.2 * d;
-          ctx.setLineDash([6 * d, 4 * d]);
-          ctx.strokeStyle = "#ffffff66";
-          ctx.beginPath();
-          ctx.moveTo(L + 8 * d, T + 8 * d);
-          ctx.lineTo(R - 8 * d, T + 8 * d);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(L + 8 * d, B - 8 * d);
-          ctx.lineTo(R - 8 * d, B - 8 * d);
-          ctx.stroke();
-          ctx.restore();
+          // === 상/하단 실선 ===
+          // ctx.save();
+          // ctx.lineWidth = 1.2 * d;
+          // ctx.setLineDash([]);
+          // ctx.strokeStyle = "#ffffff66";
+          // ctx.beginPath();
+          // ctx.moveTo(L + 8 * d, T + 8 * d);
+          // ctx.lineTo(R - 8 * d, T + 8 * d);
+          // ctx.stroke();
+          // ctx.beginPath();
+          // ctx.moveTo(L + 8 * d, B - 8 * d);
+          // ctx.lineTo(R - 8 * d, B - 8 * d);
+          // ctx.stroke();
+          // ctx.restore();
 
-          // 우측 중앙 + 버튼
-          const cx = Math.min(R - 10 * d, cv.width - 14 * d);
-          const cy = (T + B) / 2;
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(cx, cy, 7 * d, 0, Math.PI * 2);
-          ctx.fillStyle = "#111827";
-          ctx.globalAlpha = 0.9;
-          ctx.fill();
-          ctx.globalAlpha = 1;
-          ctx.lineWidth = 1.2 * d;
-          ctx.strokeStyle = "#d1d5db";
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(cx - 3 * d, cy);
-          ctx.lineTo(cx + 3 * d, cy);
-          ctx.moveTo(cx, cy - 3 * d);
-          ctx.lineTo(cx, cy + 3 * d);
-          ctx.strokeStyle = "#e5e7eb";
-          ctx.lineWidth = 1.4 * d;
-          ctx.stroke();
-          ctx.restore();
+          // === 우측 중앙 + 버튼 ===
+          // const cx = Math.min(R - 10 * d, cv.width - 14 * d);
+          // const cy = (T + B) / 2;
+          // ctx.save();
+          // ctx.beginPath();
+          // ctx.arc(cx, cy, 7 * d, 0, Math.PI * 2);
+          // ctx.fillStyle = "#111827";
+          // ctx.globalAlpha = 0.9;
+          // ctx.fill();
+          // ctx.globalAlpha = 1;
+          // ctx.lineWidth = 1.2 * d;
+          // ctx.strokeStyle = "#d1d5db";
+          // ctx.stroke();
+          // ctx.beginPath();
+          // ctx.moveTo(cx - 3 * d, cy);
+          // ctx.lineTo(cx + 3 * d, cy);
+          // ctx.moveTo(cx, cy - 3 * d);
+          // ctx.lineTo(cx, cy + 3 * d);
+          // ctx.strokeStyle = "#e5e7eb";
+          // ctx.lineWidth = 1.4 * d;
+          // ctx.stroke();
+          // ctx.restore();
         });
       }
-/* ===== Drawings ===== */
+
+      /* ===== Drawings ===== */
       const genId = () => Math.random().toString(36).slice(2, 9);
       function setTool(t) {
         tool = t;
@@ -1087,36 +1264,53 @@ const resize = () => {
       }
 
       /* ===== Load / HUD ===== */
-      
+
       // helper: filter only finite values to avoid autoscale distortion
-      function mapFiniteSeries(ks, arr){
+      function mapFiniteSeries(ks, arr) {
         const out = [];
-        for(let i=0;i<ks.length;i++){
+        for (let i = 0; i < ks.length; i++) {
           const v = arr[i];
-          if(Number.isFinite(v)) out.push({ time: ks[i].t, value: v });
+          if (Number.isFinite(v)) out.push({ time: ks[i].t, value: v });
         }
         return out;
       }
-    function reapplyStochAtr(){
-      try{
-        if (!window.subChart) return;
-        if (atrSeries && Array.isArray(atrArr) && lastKs?.length) {
-          atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
+      function reapplyStochAtr() {
+        try {
+          if (!window.subChart) return;
+          if (atrSeries && Array.isArray(atrArr) && lastKs?.length) {
+            atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
+          }
+          if (stochKSeries && Array.isArray(stochK) && lastKs?.length) {
+            stochKSeries.setData(mapFiniteSeries(lastKs, stochK));
+          }
+          if (stochDSeries && Array.isArray(stochD) && lastKs?.length) {
+            stochDSeries.setData(mapFiniteSeries(lastKs, stochD));
+          }
+          const atrOn = document.getElementById("showATR")
+            ? document.getElementById("showATR").checked
+            : true;
+          const stoOn = document.getElementById("showSTOCH")
+            ? document.getElementById("showSTOCH").checked
+            : true;
+          atrSeries && atrSeries.applyOptions({ visible: atrOn });
+          stochKSeries && stochKSeries.applyOptions({ visible: stoOn });
+          stochDSeries && stochDSeries.applyOptions({ visible: stoOn });
+        } catch (e) {
+          console.warn("[reapplyStochAtr]", e);
         }
-        if (stochKSeries && Array.isArray(stochK) && lastKs?.length) {
-          stochKSeries.setData(mapFiniteSeries(lastKs, stochK));
-        }
-        if (stochDSeries && Array.isArray(stochD) && lastKs?.length) {
-          stochDSeries.setData(mapFiniteSeries(lastKs, stochD));
-        }
-        const atrOn = document.getElementById("showATR") ? document.getElementById("showATR").checked : true;
-        const stoOn = document.getElementById("showSTOCH") ? document.getElementById("showSTOCH").checked : true;
-        atrSeries && atrSeries.applyOptions({ visible: atrOn });
-        stochKSeries && stochKSeries.applyOptions({ visible: stoOn });
-        stochDSeries && stochDSeries.applyOptions({ visible: stoOn });
-      }catch(e){ console.warn('[reapplyStochAtr]', e); }
-    }
-    async function loadAll() {
+      }
+      async function loadAll() {
+        // console.log("이거 5초마다?");
+        // Snapshot current view before data updates
+        let __snapshotRange = null;
+        try {
+          __snapshotRange =
+            lastVisibleRange ||
+            (userInteracted
+              ? mainChart.timeScale().getVisibleLogicalRange()
+              : null);
+        } catch (_) {}
+
         const symbol = $("symbol").value.trim().toUpperCase();
         const interval = $("interval").value;
 
@@ -1132,7 +1326,7 @@ const resize = () => {
             close: k.c,
           }))
         );
-        mainChart.timeScale().fitContent();
+        // mainChart.timeScale().fitContent();
 
         const closes = lastKs.map((k) => k.c);
         vwapArr = VWAP(lastKs);
@@ -1140,12 +1334,13 @@ const resize = () => {
         rsiArr = RSI(closes, 14);
         cvdArr = CVD(lastKs);
 
-        
-        maArr  = SMA(closes, 20);
+        maArr = SMA(closes, 20);
         emaArr = EMA(closes, 50);
         atrArr = ATR(lastKs, 14);
         const st = Stochastic(lastKs, 14, 3, 3);
-        stochK = st.k; stochD = st.d;vwapSeries.setData(
+        stochK = st.k;
+        stochD = st.d;
+        vwapSeries.setData(
           lastKs.map((k, i) => ({ time: k.t, value: vwapArr[i] }))
         );
         temaSeries.setData(
@@ -1159,10 +1354,9 @@ const resize = () => {
           lastKs.map((k, i) => ({ time: k.t, value: cvdArr[i] ?? null }))
         );
 
-        
-        if (maSeries)   maSeries.setData(mapFiniteSeries(lastKs, maArr));
-        if (emaSeries)  emaSeries.setData(mapFiniteSeries(lastKs, emaArr));
-        if (atrSeries)  atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
+        if (maSeries) maSeries.setData(mapFiniteSeries(lastKs, maArr));
+        if (emaSeries) emaSeries.setData(mapFiniteSeries(lastKs, emaArr));
+        if (atrSeries) atrSeries.setData(mapFiniteSeries(lastKs, atrArr));
         if (stochKSeries) stochKSeries.setData(mapFiniteSeries(lastKs, stochK));
         if (stochDSeries) stochDSeries.setData(mapFiniteSeries(lastKs, stochD));
         vwapSeries.applyOptions({ visible: $("showVWAP").checked });
@@ -1171,18 +1365,54 @@ const resize = () => {
         rsiSeries.applyOptions({ visible: $("showRSI").checked });
         cvdSeries.applyOptions({ visible: $("showCVD").checked });
 
-        
-        if (maSeries)   maSeries.applyOptions({ visible: $("showMA")?.checked ?? false });
-        if (emaSeries)  emaSeries.applyOptions({ visible: $("showEMA")?.checked ?? false });
-        if (atrSeries)  atrSeries.applyOptions({ visible: $("showATR")?.checked ?? false });
-        if (stochKSeries) stochKSeries.applyOptions({ visible: $("showSTOCH")?.checked ?? false });
-        if (stochDSeries) stochDSeries.applyOptions({ visible: $("showSTOCH")?.checked ?? false });
-        await refreshZones({ forceServer: true });
-        await refreshHUD();
-        if (typeof updateLocalHUD==="function") updateLocalHUD();
-        reapplyStochAtr();
+        if (maSeries)
+          maSeries.applyOptions({ visible: $("showMA")?.checked ?? false });
+        if (emaSeries)
+          emaSeries.applyOptions({ visible: $("showEMA")?.checked ?? false });
+        if (atrSeries)
+          atrSeries.applyOptions({ visible: $("showATR")?.checked ?? false });
+        if (stochKSeries)
+          stochKSeries.applyOptions({
+            visible: $("showSTOCH")?.checked ?? false,
+          });
+        if (stochDSeries)
+          stochDSeries.applyOptions({
+            visible: $("showSTOCH")?.checked ?? false,
+          });
+
+        // Ensure OB zones are (re)computed and drawn on each load
+        try {
+          if ($("showOB")?.checked) {
+            await refreshZones({ forceServer: true });
+          } else {
+            zones = [];
+          }
+        } catch (e) {
+          console.warn("[zones @loadAll]", e);
+        }
+        // === Preserve current zoom/pan if the user interacted; otherwise fit once ===
+        try {
+          const prevRange = __snapshotRange;
+          if (prevRange && isFinite(prevRange.from) && isFinite(prevRange.to)) {
+            __isRestoring = true;
+            mainChart.timeScale().setVisibleLogicalRange(prevRange);
+            subChart.timeScale().setVisibleLogicalRange(prevRange);
+            __isRestoring = false;
+          } else {
+            mainChart.timeScale().fitContent();
+          }
+        } catch (e) {
+          console.warn("[view restore @loadAll]", e);
+        }
         drawAll();
+
+        // await refreshZones({ forceServer: true });
+        // await refreshHUD();
+        // if (typeof updateLocalHUD === "function") updateLocalHUD();
+        // reapplyStochAtr();
+        // drawAll();
       }
+
       async function refreshHUD() {
         const symbol = $("symbol").value.trim().toUpperCase();
         const interval = $("interval").value;
@@ -1333,42 +1563,47 @@ const resize = () => {
       }
 
       /* ===== Events ===== */
-      
-/* ===== indicator HUD helpers (safe-add) ===== */
-function injectIndicatorHUD(){
-  const hud = document.getElementById("hud");
-  if(!hud) return; // if no HUD container, skip
-  const make = (id, label) => {
-    if(document.getElementById(id)) return;
-    const card = document.createElement("div");
-    card.className = "card";
-    const t = document.createElement("div"); t.textContent = label;
-    const v = document.createElement("div"); v.id = id; v.textContent = "-";
-    card.appendChild(t); card.appendChild(v); hud.appendChild(card);
-  };
-  // add-on cards (won't duplicate if already exist)
-  make("hud_ma20",  "MA(20)");
-  make("hud_ema50", "EMA(50)");
-  make("hud_stochK","Stoch %K");
-  make("hud_stochD","Stoch %D");
-}
-function updateLocalHUD(){
-  try{
-    const i = (window.lastKs?.length ?? 0) - 1;
-    if(i < 0) return;
-    const put = (id, val, d=2) => {
-      const el = document.getElementById(id);
-      if(!el) return;
-      if(val==null || !isFinite(val)) el.textContent = "-";
-      else el.textContent = Number(val).toFixed(d);
-    };
-    put("hud_ma20",  window.maArr?.[i]);
-    put("hud_ema50", window.emaArr?.[i]);
-    put("hud_stochK", window.stochK?.[i]);
-    put("hud_stochD", window.stochD?.[i]);
-  }catch(_){}
-}
-window.addEventListener("DOMContentLoaded", async () => {
+
+      /* ===== indicator HUD helpers (safe-add) ===== */
+      function injectIndicatorHUD() {
+        const hud = document.getElementById("hud");
+        if (!hud) return; // if no HUD container, skip
+        const make = (id, label) => {
+          if (document.getElementById(id)) return;
+          const card = document.createElement("div");
+          card.className = "card";
+          const t = document.createElement("div");
+          t.textContent = label;
+          const v = document.createElement("div");
+          v.id = id;
+          v.textContent = "-";
+          card.appendChild(t);
+          card.appendChild(v);
+          hud.appendChild(card);
+        };
+        // add-on cards (won't duplicate if already exist)
+        make("hud_ma20", "MA(20)");
+        make("hud_ema50", "EMA(50)");
+        make("hud_stochK", "Stoch %K");
+        make("hud_stochD", "Stoch %D");
+      }
+      function updateLocalHUD() {
+        try {
+          const i = (window.lastKs?.length ?? 0) - 1;
+          if (i < 0) return;
+          const put = (id, val, d = 2) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (val == null || !isFinite(val)) el.textContent = "-";
+            else el.textContent = Number(val).toFixed(d);
+          };
+          put("hud_ma20", window.maArr?.[i]);
+          put("hud_ema50", window.emaArr?.[i]);
+          put("hud_stochK", window.stochK?.[i]);
+          put("hud_stochD", window.stochD?.[i]);
+        } catch (_) {}
+      }
+      window.addEventListener("DOMContentLoaded", async () => {
         buildCharts();
 
         document
@@ -1389,9 +1624,11 @@ window.addEventListener("DOMContentLoaded", async () => {
         });
         $("undoBtn").addEventListener("click", undo);
         $("redoBtn").addEventListener("click", redo);
-        $("autoBtn").addEventListener("click", () =>
-          mainChart.timeScale().fitContent()
-        );
+        $("autoBtn").addEventListener("click", () => {
+          mainChart.timeScale().fitContent();
+          (userInteracted = false), (lastVisibleRange = null);
+          (__isRestoring = false), (__isSyncing = false);
+        });
         $("logBtn").addEventListener("click", () => {
           const mode = candleSeries.priceScale().options().mode;
           const next =
@@ -1443,7 +1680,6 @@ window.addEventListener("DOMContentLoaded", async () => {
           cvdSeries.applyOptions({ visible: e.target.checked })
         );
 
-        
         $("showMA").addEventListener("change", (e) =>
           maSeries?.applyOptions({ visible: e.target.checked })
         );
@@ -1457,8 +1693,17 @@ window.addEventListener("DOMContentLoaded", async () => {
           stochKSeries?.applyOptions({ visible: e.target.checked });
           stochDSeries?.applyOptions({ visible: e.target.checked });
         });
-$("loadBtn").addEventListener("click", loadAll);
+        $("loadBtn").addEventListener("click", loadAll);
         $("runStratBtn").addEventListener("click", async () => {
+          // capture current view before strategy re-run
+          let __prevRange__ = null;
+          try {
+            __prevRange__ =
+              lastVisibleRange ||
+              (userInteracted
+                ? mainChart.timeScale().getVisibleLogicalRange()
+                : null);
+          } catch (_) {}
           const symbol = $("symbol").value.trim().toUpperCase();
           const interval = $("interval").value;
           await fetch(
@@ -1479,11 +1724,10 @@ $("loadBtn").addEventListener("click", loadAll);
             shape: s.side === "LONG" ? "arrowUp" : "arrowDown",
             text: s.side,
           }));
-          candleSeries.setMarkers(markers);
-  await refreshHUD();
-        if (typeof updateLocalHUD==="function") updateLocalHUD();
-}
-);
+          // candleSeries.setMarkers(markers);
+          await refreshHUD();
+          if (typeof updateLocalHUD === "function") updateLocalHUD();
+        });
 
         $("cmpBtn").addEventListener("click", addCompare);
         $("rangeBars").addEventListener("input", applyReplay);
@@ -1491,12 +1735,20 @@ $("loadBtn").addEventListener("click", loadAll);
         $("playBtn").addEventListener("click", playReplay);
 
         document.addEventListener("change", (e) => {
-          const t = e.target; if (!t || t.tagName !== "INPUT" || t.type !== "checkbox") return;
-          try { reapplyStochAtr(); } catch(_) {}
+          const t = e.target;
+          if (!t || t.tagName !== "INPUT" || t.type !== "checkbox") return;
+          try {
+            reapplyStochAtr();
+          } catch (_) {}
         });
 
         // keyboard
         window.addEventListener("keydown", (e) => {
+          // mark user interaction on keyboard ops that change view
+          try {
+            userInteracted = true;
+            lastVisibleRange = mainChart.timeScale().getVisibleLogicalRange();
+          } catch (_) {}
           if (e.key === "Delete" && selectedId) {
             pushUndo();
             drawings = drawings.filter((d) => d.id !== selectedId);
@@ -1521,7 +1773,7 @@ $("loadBtn").addEventListener("click", loadAll);
         setInterval(() => ($("nowKST").textContent = nowKST()), 1000);
         setInterval(refreshHUD, 115000);
 
-        if (typeof injectIndicatorHUD==="function") injectIndicatorHUD();
+        if (typeof injectIndicatorHUD === "function") injectIndicatorHUD();
         await loadAll();
       });
     </script>
@@ -3152,137 +3404,228 @@ $("loadBtn").addEventListener("click", loadAll);
         });
       })();
     </script>
-  
-<!-- append-only: ATR/Stoch add-on -->
-<script>
-/* ===== ATR/STOCH ADDON ===== */
-(function(){
-  const NS = (window.__atrstoch_addon ||= {});
-  const $ = (id) => document.getElementById(id);
 
-  // -------- local helpers --------
-  function SMA(arr, L){
-    let sum=0; const out=Array(arr.length).fill(null);
-    for(let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=L) sum-=arr[i-L]; if(i>=L-1) out[i]=sum/L; }
-    return out;
-  }
-  function ATR(ks, L=14){
-    const out=Array(ks.length).fill(null); let prevC=null, acc=0, q=[];
-    const tr=ks.map(k=>{ const t=prevC==null? (k.h-k.l):Math.max(k.h-k.l, Math.abs(k.h-prevC), Math.abs(k.l-prevC)); prevC=k.c; return t; });
-    for(let i=0;i<tr.length;i++){ q.push(tr[i]); acc+=tr[i]; if(i>=L){ acc-=q.shift(); } if(i>=L-1) out[i]=acc/L; }
-    return out;
-  }
-  function Stochastic(ks, L=14, K=3, D=3){
-    const kRaw=Array(ks.length).fill(null);
-    for(let i=0;i<ks.length;i++){
-      const from=Math.max(0,i-L+1); let hi=-Infinity, lo=Infinity;
-      for(let j=from;j<=i;j++){ if(ks[j].h>hi) hi=ks[j].h; if(ks[j].l<lo) lo=ks[j].l; }
-      if(i>=L-1){ const den=hi-lo; kRaw[i]=den===0?50:((ks[i].c-lo)/den)*100; }
-    }
-    const kSmooth=SMA(kRaw.map(x=>x??0), K).map((v,i)=>kRaw[i]==null?null:v);
-    const dArr   =SMA(kSmooth.map(x=>x??0), D).map((v,i)=>kSmooth[i]==null?null:v);
-    return { k:kSmooth, d:dArr };
-  }
-  function mapFiniteSeries(ks, arr){
-    const out=[];
-    for(let i=0;i<ks.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out.push({ time: ks[i].t, value: v }); }
-    return out;
-  }
+    <!-- append-only: ATR/Stoch add-on -->
+    <script>
+      /* ===== ATR/STOCH ADDON ===== */
+      (function () {
+        const NS = (window.__atrstoch_addon ||= {});
+        const $ = (id) => document.getElementById(id);
 
-  // -------- ensure series & price scales --------
-  function ensureSeries(){
-    const sc = window.subChart;
-    if(!sc) return false;
+        // -------- local helpers --------
+        function SMA(arr, L) {
+          let sum = 0;
+          const out = Array(arr.length).fill(null);
+          for (let i = 0; i < arr.length; i++) {
+            sum += arr[i];
+            if (i >= L) sum -= arr[i - L];
+            if (i >= L - 1) out[i] = sum / L;
+          }
+          return out;
+        }
+        function ATR(ks, L = 14) {
+          const out = Array(ks.length).fill(null);
+          let prevC = null,
+            acc = 0,
+            q = [];
+          const tr = ks.map((k) => {
+            const t =
+              prevC == null
+                ? k.h - k.l
+                : Math.max(
+                    k.h - k.l,
+                    Math.abs(k.h - prevC),
+                    Math.abs(k.l - prevC)
+                  );
+            prevC = k.c;
+            return t;
+          });
+          for (let i = 0; i < tr.length; i++) {
+            q.push(tr[i]);
+            acc += tr[i];
+            if (i >= L) {
+              acc -= q.shift();
+            }
+            if (i >= L - 1) out[i] = acc / L;
+          }
+          return out;
+        }
+        function Stochastic(ks, L = 14, K = 3, D = 3) {
+          const kRaw = Array(ks.length).fill(null);
+          for (let i = 0; i < ks.length; i++) {
+            const from = Math.max(0, i - L + 1);
+            let hi = -Infinity,
+              lo = Infinity;
+            for (let j = from; j <= i; j++) {
+              if (ks[j].h > hi) hi = ks[j].h;
+              if (ks[j].l < lo) lo = ks[j].l;
+            }
+            if (i >= L - 1) {
+              const den = hi - lo;
+              kRaw[i] = den === 0 ? 50 : ((ks[i].c - lo) / den) * 100;
+            }
+          }
+          const kSmooth = SMA(
+            kRaw.map((x) => x ?? 0),
+            K
+          ).map((v, i) => (kRaw[i] == null ? null : v));
+          const dArr = SMA(
+            kSmooth.map((x) => x ?? 0),
+            D
+          ).map((v, i) => (kSmooth[i] == null ? null : v));
+          return { k: kSmooth, d: dArr };
+        }
+        function mapFiniteSeries(ks, arr) {
+          const out = [];
+          for (let i = 0; i < ks.length; i++) {
+            const v = arr[i];
+            if (Number.isFinite(v)) out.push({ time: ks[i].t, value: v });
+          }
+          return out;
+        }
 
-    if(!NS.atrSeries){
-      NS.atrSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "atr", visible: ($("showATR")?.checked ?? true) });
-      try { sc.priceScale("atr").applyOptions({ scaleMargins: { top: 0.15, bottom: 0.05 } }); } catch(_){}
-    }
-    if(!NS.stochKSeries){
-      NS.stochKSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "stoch", visible: ($("showSTOCH")?.checked ?? true) });
-    }
-    if(!NS.stochDSeries){
-      NS.stochDSeries = sc.addLineSeries({ lineWidth: 1, priceScaleId: "stoch", visible: ($("showSTOCH")?.checked ?? true) });
-      try { sc.priceScale("stoch").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } }); } catch(_){}
-    }
-    return true;
-  }
+        // -------- ensure series & price scales --------
+        function ensureSeries() {
+          const sc = window.subChart;
+          if (!sc) return false;
 
-  // -------- compute & update --------
-  function updateATRStoch(){
-    const ks = window.lastKs;
-    if(!Array.isArray(ks) || ks.length===0) return;
-    if(!ensureSeries()) return;
+          if (!NS.atrSeries) {
+            NS.atrSeries = sc.addLineSeries({
+              lineWidth: 1,
+              priceScaleId: "atr",
+              visible: $("showATR")?.checked ?? true,
+            });
+            try {
+              sc.priceScale("atr").applyOptions({
+                scaleMargins: { top: 0.15, bottom: 0.05 },
+              });
+            } catch (_) {}
+          }
+          if (!NS.stochKSeries) {
+            NS.stochKSeries = sc.addLineSeries({
+              lineWidth: 1,
+              priceScaleId: "stoch",
+              visible: $("showSTOCH")?.checked ?? true,
+            });
+          }
+          if (!NS.stochDSeries) {
+            NS.stochDSeries = sc.addLineSeries({
+              lineWidth: 1,
+              priceScaleId: "stoch",
+              visible: $("showSTOCH")?.checked ?? true,
+            });
+            try {
+              sc.priceScale("stoch").applyOptions({
+                scaleMargins: { top: 0.1, bottom: 0.1 },
+              });
+            } catch (_) {}
+          }
+          return true;
+        }
 
-    const atr = ATR(ks, 14);
-    const st  = Stochastic(ks, 14, 3, 3);
+        // -------- compute & update --------
+        function updateATRStoch() {
+          const ks = window.lastKs;
+          if (!Array.isArray(ks) || ks.length === 0) return;
+          if (!ensureSeries()) return;
 
-    // cache for reapply when other toggles rebuild/affect scales
-    NS.cache = { ks, atr, stK: st.k, stD: st.d };
+          const atr = ATR(ks, 14);
+          const st = Stochastic(ks, 14, 3, 3);
 
-    NS.atrSeries.setData(mapFiniteSeries(ks, atr));
-    NS.stochKSeries.setData(mapFiniteSeries(ks, st.k));
-    NS.stochDSeries.setData(mapFiniteSeries(ks, st.d));
+          // cache for reapply when other toggles rebuild/affect scales
+          NS.cache = { ks, atr, stK: st.k, stD: st.d };
 
-    // respect current toggles (default ON if not present)
-    const atrOn = $("showATR") ? $("showATR").checked : true;
-    const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
-    NS.atrSeries.applyOptions({ visible: atrOn });
-    NS.stochKSeries.applyOptions({ visible: stoOn });
-    NS.stochDSeries.applyOptions({ visible: stoOn });
-  }
+          NS.atrSeries.setData(mapFiniteSeries(ks, atr));
+          NS.stochKSeries.setData(mapFiniteSeries(ks, st.k));
+          NS.stochDSeries.setData(mapFiniteSeries(ks, st.d));
 
-  // reapply after other toggles affect layout/visibility
-  function reapplyAll(){
-    if(!ensureSeries()) return;
-    const C = NS.cache;
-    const ks = window.lastKs;
-    if(C && ks){
-      if(C.atr && NS.atrSeries) NS.atrSeries.setData(mapFiniteSeries(ks, C.atr));
-      if(C.stK && NS.stochKSeries) NS.stochKSeries.setData(mapFiniteSeries(ks, C.stK));
-      if(C.stD && NS.stochDSeries) NS.stochDSeries.setData(mapFiniteSeries(ks, C.stD));
-    }
-    const atrOn = $("showATR") ? $("showATR").checked : true;
-    const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
-    NS.atrSeries && NS.atrSeries.applyOptions({ visible: atrOn });
-    NS.stochKSeries && NS.stochKSeries.applyOptions({ visible: stoOn });
-    NS.stochDSeries && NS.stochDSeries.applyOptions({ visible: stoOn });
-  }
+          // respect current toggles (default ON if not present)
+          const atrOn = $("showATR") ? $("showATR").checked : true;
+          const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
+          NS.atrSeries.applyOptions({ visible: atrOn });
+          NS.stochKSeries.applyOptions({ visible: stoOn });
+          NS.stochDSeries.applyOptions({ visible: stoOn });
+        }
 
-  // -------- wire into lifecycle (append-only) --------
-  const _build = window.buildCharts;
-  if(typeof _build === "function"){
-    window.buildCharts = function(...args){
-      const r = _build.apply(this, args);
-      try { ensureSeries(); reapplyAll(); } catch(e){ console.warn('[ATR/Stoch addon] ensure error', e); }
-      return r;
-    };
-  }
-  const _load = window.loadAll;
-  if(typeof _load === "function"){
-    window.loadAll = async function(...args){
-      const r = await _load.apply(this, args);
-      try { updateATRStoch(); } catch(e){ console.warn('[ATR/Stoch addon] update error', e); }
-      return r;
-    };
-  }
+        // reapply after other toggles affect layout/visibility
+        function reapplyAll() {
+          if (!ensureSeries()) return;
+          const C = NS.cache;
+          const ks = window.lastKs;
+          if (C && ks) {
+            if (C.atr && NS.atrSeries)
+              NS.atrSeries.setData(mapFiniteSeries(ks, C.atr));
+            if (C.stK && NS.stochKSeries)
+              NS.stochKSeries.setData(mapFiniteSeries(ks, C.stK));
+            if (C.stD && NS.stochDSeries)
+              NS.stochDSeries.setData(mapFiniteSeries(ks, C.stD));
+          }
+          const atrOn = $("showATR") ? $("showATR").checked : true;
+          const stoOn = $("showSTOCH") ? $("showSTOCH").checked : true;
+          NS.atrSeries && NS.atrSeries.applyOptions({ visible: atrOn });
+          NS.stochKSeries && NS.stochKSeries.applyOptions({ visible: stoOn });
+          NS.stochDSeries && NS.stochDSeries.applyOptions({ visible: stoOn });
+        }
 
-  // listen to ANY checkbox change to reapply (coexist with other toggles)
-  document.addEventListener('change', (e) => {
-    const t = e.target;
-    if(t && t.tagName === 'INPUT' && t.type === 'checkbox'){
-      setTimeout(() => { try { reapplyAll(); } catch(_){ } }, 0);
-    }
-  });
+        // -------- wire into lifecycle (append-only) --------
+        const _build = window.buildCharts;
+        if (typeof _build === "function") {
+          window.buildCharts = function (...args) {
+            const r = _build.apply(this, args);
+            try {
+              ensureSeries();
+              reapplyAll();
+            } catch (e) {
+              console.warn("[ATR/Stoch addon] ensure error", e);
+            }
+            return r;
+          };
+        }
+        const _load = window.loadAll;
+        if (typeof _load === "function") {
+          window.loadAll = async function (...args) {
+            const r = await _load.apply(this, args);
+            try {
+              updateATRStoch();
+            } catch (e) {
+              console.warn("[ATR/Stoch addon] update error", e);
+            }
+            return r;
+          };
+        }
 
-  // initial
-  document.addEventListener('DOMContentLoaded', () => {
-    try { ensureSeries(); updateATRStoch(); } catch(_){}
-    const atrCk = $('showATR'); if(atrCk) atrCk.addEventListener('change', e => NS.atrSeries?.applyOptions({ visible: e.target.checked }));
-    const stoCk = $('showSTOCH'); if(stoCk) stoCk.addEventListener('change', e => { NS.stochKSeries?.applyOptions({ visible: e.target.checked }); NS.stochDSeries?.applyOptions({ visible: e.target.checked }); });
-  });
-})();
-/* ===== /ATR/STOCH ADDON ===== */
-</script>
-</body>
+        // listen to ANY checkbox change to reapply (coexist with other toggles)
+        document.addEventListener("change", (e) => {
+          const t = e.target;
+          if (t && t.tagName === "INPUT" && t.type === "checkbox") {
+            setTimeout(() => {
+              try {
+                reapplyAll();
+              } catch (_) {}
+            }, 0);
+          }
+        });
+
+        // initial
+        document.addEventListener("DOMContentLoaded", () => {
+          try {
+            ensureSeries();
+            updateATRStoch();
+          } catch (_) {}
+          const atrCk = $("showATR");
+          if (atrCk)
+            atrCk.addEventListener("change", (e) =>
+              NS.atrSeries?.applyOptions({ visible: e.target.checked })
+            );
+          const stoCk = $("showSTOCH");
+          if (stoCk)
+            stoCk.addEventListener("change", (e) => {
+              NS.stochKSeries?.applyOptions({ visible: e.target.checked });
+              NS.stochDSeries?.applyOptions({ visible: e.target.checked });
+            });
+        });
+      })();
+      /* ===== /ATR/STOCH ADDON ===== */
+    </script>
+  </body>
 </html>
