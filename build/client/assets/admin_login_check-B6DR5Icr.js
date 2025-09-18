@@ -1,0 +1,1 @@
+import{r as e}from"./index-CtvPRVHf.js";import{u as a}from"./index-kH-wUL5G.js";function n(){const r=a(),t=e.useRef(!1);return e.useEffect(()=>{t.current||(alert("로그인 해주세요."),t.current=!0,r("/admin/login"))},[]),null}export{n as default};

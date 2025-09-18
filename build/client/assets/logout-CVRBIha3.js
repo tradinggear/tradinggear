@@ -1,0 +1,1 @@
+import{r as t}from"./index-CtvPRVHf.js";import{u as r}from"./index-kH-wUL5G.js";function n(){const o=r(),e=t.useRef(!1);return t.useEffect(()=>{e.current||(sessionStorage.clear(),sessionStorage.removeItem("email"),sessionStorage.removeItem("fullName"),sessionStorage.removeItem("nickName"),alert("로그아웃 되었습니다."),e.current=!0,o("/login"))},[]),null}export{n as default};
