@@ -262,7 +262,9 @@
           <button class="toolbtn" data-tool="trend">트렌드</button>
           <button class="toolbtn" data-tool="hline">수평선</button>
           <button class="toolbtn" data-tool="rect">박스</button>
-          <button class="toolbtn" data-tool="ruler">룰러</button>
+          <button class="toolbtn" data-tool="ruler" style="display: none">
+            룰러
+          </button>
           <button class="toolbtn" id="magnetBtn">자석 OFF</button>
           <button class="toolbtn" id="delBtn">삭제(Del)</button>
           <button class="toolbtn" id="undoBtn">↶</button>
@@ -401,19 +403,31 @@
     <script>
       /* ===== Utils ===== */
       const api = (p) => p;
+
+      // id로 DOM 요소를 가져오는 단축 함수
       const $ = (id) => document.getElementById(id);
+
+      // CSS 변수 값 가져오기 (예: css("--main-color"))
       const css = (name) =>
-        getComputedStyle(document.documentElement)
-          .getPropertyValue(name)
-          .trim();
+        getComputedStyle(document.documentElement) // <html> 요소의 계산된 스타일 가져오기
+          .getPropertyValue(name) // CSS 속성 값 얻기
+          .trim(); // 앞뒤 공백 제거
+
+      // 현재 기기의 디바이스 픽셀 비율 반환 (레티나 디스플레이면 2, 일반은 1)
       const DPR = () => window.devicePixelRatio || 1;
+
+      // 숫자를 고정 소수점 형태로 포맷, 값이 없거나 숫자가 아니면 "-" 반환
+      // fmt(3.14159) -> "3.14", fmt(null) -> "-"
       const fmt = (n, d = 2) =>
         n == null || isNaN(n) ? "-" : Number(n).toFixed(d);
+
+      // 현재 한국 표준시(KST, UTC+9)를 "YYYY-MM-DD HH:mm:ss" 형식으로 반환
+      // 예: "2025-09-19 15:30:45"
       const nowKST = () =>
-        new Date(Date.now() + 9 * 3600 * 1000)
-          .toISOString()
-          .replace("T", " ")
-          .slice(0, 19);
+        new Date(Date.now() + 9 * 3600 * 1000) // 현재 UTC 시간 + 9시간
+          .toISOString() // "YYYY-MM-DDTHH:mm:ss.sssZ" 형태
+          .replace("T", " ") // "T"를 공백으로 치환
+          .slice(0, 19); // 밀리초와 Z 제거
 
       /* ===== Global ===== */
       let mainChart,
@@ -584,7 +598,7 @@
           ovS = $("overlaySub");
 
         // ────────────────────────────────────────────────
-        // 🖱️ 마우스/터치 등 사용자 상호작용 감지 → 줌/팬 유지용
+        //  마우스/터치 등 사용자 상호작용 감지 → 줌/팬 유지용
         // ────────────────────────────────────────────────
         const __markInteract = () => {
           try {
@@ -603,7 +617,7 @@
         s.addEventListener("touchstart", __markInteract, { passive: true });
 
         // ────────────────────────────────────────────────
-        // 📊 메인 차트(mainChart) 생성
+        //  메인 차트(mainChart) 생성
         // ────────────────────────────────────────────────
 
         mainChart = LightweightCharts.createChart(m, {
@@ -627,7 +641,7 @@
         });
 
         // ────────────────────────────────────────────────
-        // 📊 서브 차트(subChart) 생성
+        //  서브 차트(subChart) 생성
         // ────────────────────────────────────────────────
 
         subChart = LightweightCharts.createChart(s, {
@@ -651,7 +665,7 @@
         });
 
         // ────────────────────────────────────────────────
-        // 📈 메인 차트 시리즈 추가 (캔들, 이동평균선 등)
+        // 메인 차트 시리즈 추가 (캔들, 이동평균선 등)
         // ────────────────────────────────────────────────
         candleSeries = mainChart.addCandlestickSeries({
           upColor: css("--buy"),
