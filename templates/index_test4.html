@@ -209,8 +209,8 @@
           <label
             >인터벌
             <select id="interval">
-              <option>1m</option>
-              <option>3m</option>
+              <option style="display: none">1m</option>
+              <option style="display: none">3m</option>
               <option>5m</option>
               <option selected>15m</option>
               <option>1h</option>
@@ -250,7 +250,7 @@
             ><input type="checkbox" id="showVOL" checked /> Vol</label
           >
           <label class="small"
-            ><input type="checkbox" id="showRSI" checked /> RSI(14)</label
+            ><input type="checkbox" id="showRSI" checked /> RSI</label
           >
           <label class="small"
             ><input type="checkbox" id="showCVD" checked /> CVD</label
@@ -273,7 +273,9 @@
 
         <div class="group">
           <button class="toolbtn" id="autoBtn">오토스케일</button>
-          <button class="toolbtn" id="logBtn">로그 OFF</button>
+          <button class="toolbtn" id="logBtn" style="display: none">
+            로그 OFF
+          </button>
           <button class="toolbtn" id="themeBtn">라이트/다크</button>
           <button class="toolbtn" id="fullBtn">풀스크린</button>
           <button class="toolbtn" id="csvBtn">CSV</button>
@@ -289,7 +291,19 @@
           <button id="cmpBtn">추가/갱신</button>
           <span class="small">기준=100</span>
         </div>
-
+        <!-- 리플레이 -->
+        <div class="group">
+          <label class="small"
+            >바수
+            <input type="range" id="rangeBars" min="50" max="500" value="300"
+          /></label>
+          <label class="small"
+            >시작
+            <input type="range" id="rangeStart" min="0" max="200" value="0"
+          /></label>
+          <button id="playBtn">▶ 재생</button>
+          <span class="small">KST <span id="nowKST"></span></span>
+        </div>
         <!-- 비교 그룹 옆에 HUD 카드 배치 -->
         <div class="hud-inline">
           <div class="card">
@@ -308,19 +322,10 @@
             <div>CVD</div>
             <div id="hud_cvd">-</div>
           </div>
-        </div>
-
-        <div class="group" style="display: none">
-          <label class="small"
-            >바수
-            <input type="range" id="rangeBars" min="50" max="500" value="300"
-          /></label>
-          <label class="small"
-            >시작
-            <input type="range" id="rangeStart" min="0" max="200" value="0"
-          /></label>
-          <button id="playBtn">▶ 재생</button>
-          <span class="small">KST <span id="nowKST"></span></span>
+          <div class="card">
+            <div>RSI(14)</div>
+            <div id="hud_rsi">-</div>
+          </div>
         </div>
 
         <span class="sep"></span>
@@ -464,6 +469,7 @@
         redoStack = [];
       let playing = false,
         replayTimer = null;
+      let isReplayPlaying = false; // 현재 리플레이 중인지를 표시하는 변수 (true일 경우, 자동갱신을 막는다.)
 
       // 사용자 인터렉션 기억
       let userInteracted = false, // 사용자가 직접 차트를 조작(줌/팬)했는지 여부
@@ -504,6 +510,7 @@
         }
         return out;
       };
+      // ATR 계산식
       const ATR = (ks, L = 14) => {
         const out = Array(ks.length).fill(null);
         let prevClose = null,
@@ -531,6 +538,7 @@
         }
         return out;
       };
+      // 스토캐스틱 오실레이터
       const Stochastic = (ks, L = 14, K = 3, D = 3) => {
         const kRaw = Array(ks.length).fill(null);
         for (let i = 0; i < ks.length; i++) {
@@ -556,6 +564,7 @@
         ).map((v, i) => (kSmooth[i] == null ? null : v));
         return { k: kSmooth, d: dArr };
       };
+      // RSI 14 계산식
       function RSI(cl, L = 14) {
         let g = 0,
           l = 0;
@@ -580,6 +589,7 @@
         }
         return out;
       }
+      // CVD 계산식
       function CVD(ks) {
         let s = 0;
         return ks.map((k) => {
@@ -632,8 +642,9 @@
             horzLines: { color: css("--line") },
           },
           timeScale: {
+            visible: false,
             borderColor: css("--line"),
-            timeVisible: true,
+            timeVisible: false,
             secondsVisible: false,
           },
           rightPriceScale: { borderColor: css("--line") },
@@ -667,6 +678,7 @@
         // ────────────────────────────────────────────────
         // 메인 차트 시리즈 추가 (캔들, 이동평균선 등)
         // ────────────────────────────────────────────────
+
         candleSeries = mainChart.addCandlestickSeries({
           upColor: css("--buy"),
           downColor: css("--sell"),
@@ -682,8 +694,8 @@
           visible: $("showVWAP").checked,
         });
         temaSeries = mainChart.addLineSeries({
-          color: css("--warn"),
-          lineWidth: 1,
+          color: "white",
+          lineWidth: 1.4,
           priceScaleId: "right",
           visible: $("showTEMA").checked,
         });
@@ -698,8 +710,16 @@
           visible: $("showEMA")?.checked ?? false,
         });
 
-        // Sub-chart series
-        // Sub-chart series
+        // 서브 차트 (아래쪽)
+
+        rsiSeries = subChart.addAreaSeries({
+          topColor: "rgba(209, 111, 255, 0.18)", // 위쪽 채움 색상 (반투명)
+          bottomColor: "rgba(209, 111, 255, 0.05)", // 아래쪽 채움 색상 (밑부분 거의 투명)
+          lineColor: "#d16fff", // 경계 라인 색상
+          lineWidth: 2, // 경계 라인 굵기
+          priceScaleId: "left",
+          visible: $("showRSI").checked,
+        });
 
         volSeries = subChart.addHistogramSeries({
           color: css("--muted"),
@@ -707,12 +727,13 @@
           priceScaleId: "right",
           visible: $("showVOL").checked,
         });
-        rsiSeries = subChart.addLineSeries({
-          color: "#d16fff",
-          lineWidth: 1,
-          priceScaleId: "left",
-          visible: $("showRSI").checked,
-        });
+        // rsiSeries = subChart.addLineSeries({
+        //   color: "#d16fff",
+        //   lineWidth: 1,
+        //   priceScaleId: "left",
+        //   visible: $("showRSI").checked,
+        // });
+
         cvdSeries = subChart.addLineSeries({
           color: "#34d399",
           lineWidth: 1,
@@ -799,7 +820,7 @@
             k.h
           )} L:${fmt(k.l)} C:${fmt(k.c)}`;
           $("hud_vol").textContent = fmt(k.v, 0);
-          $("hud_rsi").textContent = fmt(rsiArr[idx] ?? NaN, 2);
+          // $("hud_rsi").textContent = fmt(rsiArr[idx] ?? NaN, 2);
           $("hud_cvd").textContent = fmt(cvdArr[idx] ?? NaN, 0);
         });
 
@@ -1275,6 +1296,44 @@
         }
         zones = mergeZones(zones, { iou: 0.2 });
         drawAll();
+
+        // <------------- RSI에 따라 매수강세, 매도강세 표시 ------------->
+        // 최근 종가 배열
+        const closePrices = lastKs.map((k) => k.c);
+        // RSI 14 계산
+        const rsiValues = RSI(closePrices, 14);
+        // 최신 RSI
+        let latestRSI = rsiValues[rsiValues.length - 1];
+        // console.log("closePrices:", closePrices);
+        // console.log("rsiValues:", rsiValues);
+        // console.log("latestRSI", latestRSI);
+
+        // HUD 카드 표시
+        const hudRsiEl = document.getElementById("hud_rsi");
+        if (latestRSI != null) {
+          console.log("Latest RSI:", latestRSI);
+          // 테스트값
+          // latestRSI = 80;
+          if (latestRSI <= 30) {
+            // 매수 강세: 빨강
+            hudRsiEl.style.backgroundColor = "rgba(255, 0, 0, 0.5)"; // 빨강 반투명
+
+            hudRsiEl.style.padding = "2px 6px";
+            hudRsiEl.style.borderRadius = "4px";
+            hudRsiEl.textContent = latestRSI.toFixed(2) + " ↑ 매수 강세";
+          } else if (latestRSI >= 70) {
+            // 매도 강세: 파랑
+            hudRsiEl.style.backgroundColor = "rgba(30, 144, 255, 0.5)"; // DodgerBlue 반투명
+
+            hudRsiEl.style.padding = "2px 6px";
+            hudRsiEl.style.borderRadius = "4px";
+            hudRsiEl.textContent = latestRSI.toFixed(2) + " ↓ 매도 강세";
+          } else {
+            hudRsiEl.textContent = latestRSI.toFixed(2) + " 중립"; // 중립은 RSI 값만
+          }
+        } else {
+          hudRsiEl.textContent = "-";
+        }
       }
 
       /* ===== Load / HUD ===== */
@@ -1314,7 +1373,6 @@
         }
       }
       async function loadAll() {
-        // console.log("이거 5초마다?");
         // Snapshot current view before data updates
         let __snapshotRange = null;
         try {
@@ -1419,7 +1477,6 @@
           console.warn("[view restore @loadAll]", e);
         }
         drawAll();
-
         // await refreshZones({ forceServer: true });
         // await refreshHUD();
         // if (typeof updateLocalHUD === "function") updateLocalHUD();
@@ -1474,10 +1531,15 @@
           clearInterval(replayTimer);
           playing = false;
           $("playBtn").textContent = "▶ 재생";
+          isReplayPlaying = false; // 리플레이중이 아님을 표시
           return;
         }
         playing = true;
+        isReplayPlaying = true; // 리플레이 중임을 표시
+
         $("playBtn").textContent = "⏸ 정지";
+        if (typeof window.stopAuto === "function") window.stopAuto();
+
         replayTimer = setInterval(() => {
           const s = +$("rangeStart").value;
           $("rangeStart").value = Math.min(+$("rangeStart").max, s + 1);
@@ -1538,6 +1600,8 @@
 
       /* ===== Theme ===== */
       function applyTheme() {
+        const root = document.documentElement; // root
+        const isDark = root.getAttribute("data-theme") === "dark";
         const optsBase = {
           layout: {
             background: { type: "solid", color: css("--bg") },
@@ -1561,7 +1625,10 @@
           wickDownColor: css("--sell"),
         });
         vwapSeries.applyOptions({ color: css("--accent") });
-        temaSeries.applyOptions({ color: css("--warn") });
+        // temaSeries.applyOptions({ color: css("--warn") });
+        temaSeries.applyOptions({
+          color: isDark ? "white" : "#8A2BE2",
+        });
         volSeries.applyOptions({ color: css("--muted") });
         // CVD / RSI colors stay
         drawAll();
@@ -3376,7 +3443,7 @@
           let busy = false;
 
           async function tick() {
-            if (busy) return;
+            if (busy || isReplayPlaying) return;
             busy = true;
             try {
               const loadBtn = document.getElementById("loadBtn");
@@ -3398,18 +3465,23 @@
 
           function start() {
             if (timer) return;
+            console.log("start 실행됨");
             timer = setInterval(tick, 5000); // 5초 주기
             tick(); // 즉시 1회
             autoBtn.textContent = "자동실행 ON (5s)";
             autoBtn.classList.add("active");
+            // hudRsiEl();
           }
           function stop() {
             if (!timer) return;
+            console.log("stop 실행됨");
             clearInterval(timer);
             timer = null;
             autoBtn.textContent = "자동실행 OFF";
             autoBtn.classList.remove("active");
           }
+
+          window.stopAuto = stop; // ready() 내부에서 정의 후 노출
 
           autoBtn.addEventListener("click", () => (timer ? stop() : start()));
 
