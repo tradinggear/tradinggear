@@ -647,7 +647,11 @@
             timeVisible: false,
             secondsVisible: false,
           },
-          rightPriceScale: { borderColor: css("--line") },
+          rightPriceScale: {
+            borderColor: css("--line"),
+            entireTextOnly: true,
+            minimumWidth: 70, // 가격 표시란
+          },
           crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
 
@@ -671,7 +675,9 @@
             timeVisible: true,
             secondsVisible: false,
           },
-          rightPriceScale: { borderColor: css("--line") },
+          rightPriceScale: {
+            borderColor: css("--line"),
+          },
           crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
 
