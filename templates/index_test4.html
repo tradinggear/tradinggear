@@ -253,6 +253,12 @@
             ><input type="checkbox" id="showRSI" checked /> RSI</label
           >
           <label class="small"
+            ><input type="checkbox" id="showRSI70" checked /> RSI70</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showRSI30" checked /> RSI30</label
+          >
+          <label class="small"
             ><input type="checkbox" id="showCVD" checked /> CVD</label
           >
         </div>
@@ -724,14 +730,14 @@
         // 메인 차트 시리즈 추가
         // ────────────────────────────────────────────────
 
-        rsiSeries = subChart.addAreaSeries({
-          topColor: "rgba(209, 111, 255, 0.18)", // 위쪽 채움 색상 (반투명)
-          bottomColor: "rgba(209, 111, 255, 0.05)", // 아래쪽 채움 색상 (밑부분 거의 투명)
-          lineColor: "#d16fff", // 경계 라인 색상
-          lineWidth: 2, // 경계 라인 굵기
-          priceScaleId: "left",
-          visible: $("showRSI").checked,
-        });
+        // rsiSeries = subChart.addAreaSeries({
+        //   topColor: "rgba(209, 111, 255, 0.18)", // 위쪽 채움 색상 (반투명)
+        //   bottomColor: "rgba(209, 111, 255, 0.05)", // 아래쪽 채움 색상 (밑부분 거의 투명)
+        //   lineColor: "#d16fff", // 경계 라인 색상
+        //   lineWidth: 2, // 경계 라인 굵기
+        //   priceScaleId: "left",
+        //   visible: $("showRSI").checked,
+        // });
 
         volSeries = subChart.addHistogramSeries({
           color: css("--muted"),
@@ -740,43 +746,50 @@
           visible: $("showVOL").checked,
         });
 
-        // 기준선 시리즈
-        // rsi30Series = subChart.addLineSeries({
-        //   color: "#00FF00",
-        //   lineWidth: 1,
-        //   lineStyle: LightweightCharts.LineStyle.Dashed,
-        //   priceScaleId: rsiSeries.options().priceScaleId, // RSI 시리즈와 동일한 Y축 사용
-        // });
+        subChart.priceScale("rsi").applyOptions({
+          autoScale: false,
+          minValue: 0,
+          maxValue: 100,
+        });
 
-        // rsi70Series = subChart.addLineSeries({
-        //   color: "#FF0000",
-        //   lineWidth: 1,
-        //   lineStyle: LightweightCharts.LineStyle.Dashed,
-        //   priceScaleId: rsiSeries.options().priceScaleId,
-        // });
+        // 먼저 rsi 스케일에 대한 옵션 정의
+        const rsiScaleOptions = {
+          autoScale: false,
+          minValue: 0,
+          maxValue: 100,
+          position: "left",
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        };
 
+        // RSI 시리즈 (실제 RSI 값)
+        rsiSeries = subChart.addAreaSeries({
+          topColor: "rgba(209, 111, 255, 0.18)", // 위쪽 채움 색상 (반투명)
+          bottomColor: "rgba(209, 111, 255, 0.05)", // 아래쪽 채움 색상 (밑부분 거의 투명)
+          lineColor: "#d16fff", // 경계 라인 색상
+          lineWidth: 2, // 경계 라인 굵기
+          priceScaleId: "rsi",
+          priceScale: rsiScaleOptions,
+          visible: $("showRSI").checked,
+        });
+
+        // RSI30/70 기준선 (고정선)
         rsi30Series = subChart.addLineSeries({
           color: "#00FF00",
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
-          priceScaleId: rsiSeries.options().priceScaleId, // 스케일 공유
-          lastValueVisible: true, // 오른쪽 숫자 표시
+          priceScaleId: "rsi",
+          priceScale: rsiScaleOptions,
+          visible: $("showRSI30").checked,
         });
 
         rsi70Series = subChart.addLineSeries({
           color: "#FF0000",
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
-          priceScaleId: rsiSeries.options().priceScaleId, // 스케일 공유
-          lastValueVisible: true, // 오른쪽 숫자 표시
+          priceScaleId: "rsi",
+          priceScale: rsiScaleOptions,
+          visible: $("showRSI70").checked,
         });
-
-        // rsiSeries = subChart.addLineSeries({
-        //   color: "#d16fff",
-        //   lineWidth: 1,
-        //   priceScaleId: "left",
-        //   visible: $("showRSI").checked,
-        // });
 
         cvdSeries = subChart.addLineSeries({
           color: "#34d399",
@@ -1448,6 +1461,8 @@
         vwapArr = VWAP(lastKs);
         temaArr = TEMA(closes, 30);
         rsiArr = RSI(closes, 14);
+        const rsi30Arr = RSI(closes, 30);
+        const rsi70Arr = RSI(closes, 70);
         cvdArr = CVD(lastKs);
 
         maArr = SMA(closes, 20);
@@ -1467,6 +1482,7 @@
         rsiSeries.setData(
           lastKs.map((k, i) => ({ time: k.t, value: rsiArr[i] ?? null }))
         );
+
         rsi30Series.setData(lastKs.map((k) => ({ time: k.t, value: 30 })));
         rsi70Series.setData(lastKs.map((k) => ({ time: k.t, value: 70 })));
 
@@ -1483,6 +1499,8 @@
         temaSeries.applyOptions({ visible: $("showTEMA").checked });
         volSeries.applyOptions({ visible: $("showVOL").checked });
         rsiSeries.applyOptions({ visible: $("showRSI").checked });
+        rsi70Series.applyOptions({ visible: $("showRSI70").checked });
+        rsi30Series.applyOptions({ visible: $("showRSI30").checked });
         cvdSeries.applyOptions({ visible: $("showCVD").checked });
 
         if (maSeries)
@@ -1804,6 +1822,12 @@
         );
         $("showRSI").addEventListener("change", (e) =>
           rsiSeries.applyOptions({ visible: e.target.checked })
+        );
+        $("showRSI70").addEventListener("change", (e) =>
+          rsi70Series.applyOptions({ visible: e.target.checked })
+        );
+        $("showRSI30").addEventListener("change", (e) =>
+          rsi30Series.applyOptions({ visible: e.target.checked })
         );
         $("showCVD").addEventListener("change", (e) =>
           cvdSeries.applyOptions({ visible: e.target.checked })
