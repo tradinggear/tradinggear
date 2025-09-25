@@ -442,6 +442,8 @@
         temaSeries,
         volSeries,
         rsiSeries,
+        rsi30Series,
+        rsi70Series,
         cvdSeries,
         cmpSeries;
       let maSeries, emaSeries, atrSeries, stochKSeries, stochDSeries;
@@ -598,6 +600,7 @@
           return s;
         });
       }
+      const dpr = window.devicePixelRatio || 1;
 
       /* ===== Chart Build ===== */
       function buildCharts() {
@@ -650,7 +653,8 @@
           rightPriceScale: {
             borderColor: css("--line"),
             entireTextOnly: true,
-            minimumWidth: 70, // 가격 표시란
+            // minimumWidth: 69, // 가격 표시란
+            minimumWidth: Math.round(69 * dpr) / dpr, // DPR 보정
           },
           crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
@@ -716,7 +720,9 @@
           visible: $("showEMA")?.checked ?? false,
         });
 
-        // 서브 차트 (아래쪽)
+        // ────────────────────────────────────────────────
+        // 메인 차트 시리즈 추가
+        // ────────────────────────────────────────────────
 
         rsiSeries = subChart.addAreaSeries({
           topColor: "rgba(209, 111, 255, 0.18)", // 위쪽 채움 색상 (반투명)
@@ -733,6 +739,38 @@
           priceScaleId: "right",
           visible: $("showVOL").checked,
         });
+
+        // 기준선 시리즈
+        // rsi30Series = subChart.addLineSeries({
+        //   color: "#00FF00",
+        //   lineWidth: 1,
+        //   lineStyle: LightweightCharts.LineStyle.Dashed,
+        //   priceScaleId: rsiSeries.options().priceScaleId, // RSI 시리즈와 동일한 Y축 사용
+        // });
+
+        // rsi70Series = subChart.addLineSeries({
+        //   color: "#FF0000",
+        //   lineWidth: 1,
+        //   lineStyle: LightweightCharts.LineStyle.Dashed,
+        //   priceScaleId: rsiSeries.options().priceScaleId,
+        // });
+
+        rsi30Series = subChart.addLineSeries({
+          color: "#00FF00",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          priceScaleId: rsiSeries.options().priceScaleId, // 스케일 공유
+          lastValueVisible: true, // 오른쪽 숫자 표시
+        });
+
+        rsi70Series = subChart.addLineSeries({
+          color: "#FF0000",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          priceScaleId: rsiSeries.options().priceScaleId, // 스케일 공유
+          lastValueVisible: true, // 오른쪽 숫자 표시
+        });
+
         // rsiSeries = subChart.addLineSeries({
         //   color: "#d16fff",
         //   lineWidth: 1,
@@ -1418,6 +1456,7 @@
         const st = Stochastic(lastKs, 14, 3, 3);
         stochK = st.k;
         stochD = st.d;
+        const lastTime = lastKs[lastKs.length - 1].t;
         vwapSeries.setData(
           lastKs.map((k, i) => ({ time: k.t, value: vwapArr[i] }))
         );
@@ -1428,6 +1467,9 @@
         rsiSeries.setData(
           lastKs.map((k, i) => ({ time: k.t, value: rsiArr[i] ?? null }))
         );
+        rsi30Series.setData(lastKs.map((k) => ({ time: k.t, value: 30 })));
+        rsi70Series.setData(lastKs.map((k) => ({ time: k.t, value: 70 })));
+
         cvdSeries.setData(
           lastKs.map((k, i) => ({ time: k.t, value: cvdArr[i] ?? null }))
         );
