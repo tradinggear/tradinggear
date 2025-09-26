@@ -261,6 +261,12 @@
           <label class="small"
             ><input type="checkbox" id="showCVD" checked /> CVD</label
           >
+          <label class="small"
+            ><input type="checkbox" id="showSup" checked /> 지지선</label
+          >
+          <label class="small"
+            ><input type="checkbox" id="showResi" checked /> 저항선</label
+          >
         </div>
 
         <div class="group">
@@ -451,7 +457,9 @@
         rsi30Series,
         rsi70Series,
         cvdSeries,
-        cmpSeries;
+        cmpSeries,
+        supportSeries, //지지
+        resistanceSeries; // 저항
       let maSeries, emaSeries, atrSeries, stochKSeries, stochDSeries;
       let maArr = [],
         emaArr = [],
@@ -724,6 +732,26 @@
           lineWidth: 1,
           priceScaleId: "right",
           visible: $("showEMA")?.checked ?? false,
+        });
+
+        // ────────────────────────────────────────────────
+        //  지지/저항선
+        // ────────────────────────────────────────────────
+
+        supportSeries = mainChart.addLineSeries({
+          color: "green", // 지지선
+          lineWidth: 2,
+          priceLineVisible: false,
+          crossHairMarkerVisible: false,
+          visible: $("showSup").checked,
+        });
+
+        resistanceSeries = mainChart.addLineSeries({
+          color: "red", // 저항선
+          lineWidth: 2,
+          priceLineVisible: false,
+          crossHairMarkerVisible: false,
+          visible: $("showResi").checked,
         });
 
         // ────────────────────────────────────────────────
@@ -1472,6 +1500,90 @@
         stochK = st.k;
         stochD = st.d;
         const lastTime = lastKs[lastKs.length - 1].t;
+
+        // ---------------------------- 09.26 ----------------------------
+
+        function drawSupportResistanceBars() {
+          if (!lastKs || !lastKs.length) return;
+
+          const start = lastKs[0].t;
+          const end = lastKs[lastKs.length - 1].t;
+
+          // TEMA30 아래 + RSI14 <= 30 → 지지
+          const supportPrices = lastKs
+            .filter((k, i) => k.c < temaArr[i] && rsiArr[i] <= 30)
+            .map((k) => k.l); // 바닥(low) 기준
+          const supportPrice =
+            supportPrices.length > 0
+              ? supportPrices.reduce((a, b) => a + b, 0) / supportPrices.length
+              : null;
+
+          // TEMA30 위 + RSI14 >= 70 → 저항
+          const resistancePrices = lastKs
+            .filter((k, i) => k.c > temaArr[i] && rsiArr[i] >= 70)
+            .map((k) => k.h); // 꼭대기(high) 기준
+          const resistancePrice =
+            resistancePrices.length > 0
+              ? resistancePrices.reduce((a, b) => a + b, 0) /
+                resistancePrices.length
+              : null;
+
+          // 지지선/저항선 표시
+          if (supportPrice != null) {
+            supportSeries.setData([
+              { time: start, value: supportPrice },
+              { time: end, value: supportPrice },
+            ]);
+          } else {
+            supportSeries.setData([]);
+          }
+
+          if (resistancePrice != null) {
+            resistanceSeries.setData([
+              { time: start, value: resistancePrice },
+              { time: end, value: resistancePrice },
+            ]);
+          } else {
+            resistanceSeries.setData([]);
+          }
+        }
+
+        function detectVolumeSpike(ks, window = 20, threshold = 2) {
+          const vols = ks.map((k) => k.v);
+          const sma = SMA(vols, window);
+          return vols.map((v, i) => (sma[i] && v > sma[i] * threshold ? 1 : 0));
+        }
+
+        // ===== OB + Volume Spike + 지지/저항 =====
+        const obBuyLow = Array(lastKs.length).fill(null);
+        const obSellHigh = Array(lastKs.length).fill(null);
+        const volumeSpikeArr = detectVolumeSpike(lastKs, 20, 2); // 거래량 스파이크 계산
+
+        // zones 배열이 이미 refreshZones 등에서 채워졌다고 가정
+        zones.forEach((z) => {
+          const startIdx = lastKs.findIndex((k) => k.t === z.start);
+          if (startIdx === -1) return;
+          if (z.type === "bullish")
+            for (let i = startIdx; i < lastKs.length; i++)
+              obBuyLow[i] = z.bottom;
+          if (z.type === "bearish")
+            for (let i = startIdx; i < lastKs.length; i++)
+              obSellHigh[i] = z.top;
+        });
+        drawSupportResistanceBars({
+          lastKs,
+          temaArr,
+          rsiArr,
+          obBuyLow,
+          obSellHigh,
+          vwapArr,
+          volumeSpikeArr,
+          supportSeries,
+          resistanceSeries,
+        });
+
+        // ---------------------------- 09.26 ----------------------------
+
         vwapSeries.setData(
           lastKs.map((k, i) => ({ time: k.t, value: vwapArr[i] }))
         );
@@ -1502,6 +1614,13 @@
         rsi70Series.applyOptions({ visible: $("showRSI70").checked });
         rsi30Series.applyOptions({ visible: $("showRSI30").checked });
         cvdSeries.applyOptions({ visible: $("showCVD").checked });
+
+        resistanceSeries.applyOptions({
+          visible: $("showResi")?.checked ?? false,
+        });
+        supportSeries.applyOptions({
+          visible: $("showSup")?.checked ?? false,
+        });
 
         if (maSeries)
           maSeries.applyOptions({ visible: $("showMA")?.checked ?? false });
@@ -1831,6 +1950,14 @@
         );
         $("showCVD").addEventListener("change", (e) =>
           cvdSeries.applyOptions({ visible: e.target.checked })
+        );
+
+        $("showResi").addEventListener("change", (e) =>
+          resistanceSeries.applyOptions({ visible: e.target.checked })
+        );
+
+        $("showSup").addEventListener("change", (e) =>
+          supportSeries.applyOptions({ visible: e.target.checked })
         );
 
         $("showMA").addEventListener("change", (e) =>
