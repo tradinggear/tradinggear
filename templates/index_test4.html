@@ -1328,6 +1328,22 @@
         });
       }
 
+      async function fetchFundingRate(symbol = "BTCUSDT", limit = 50) {
+        try {
+          const params = new URLSearchParams({ symbol, limit });
+          const response = await fetch(
+            api(`/api/funding-rate?${params.toString()}`)
+          );
+          if (!response.ok)
+            throw new Error(`HTTP error! status: ${response.status}`);
+
+          const data = await response.json();
+          console.log("Funding Rate Data:", data.data); // FastAPI 반환 구조 기준
+        } catch (err) {
+          console.error("Error fetching funding rate:", err);
+        }
+      }
+
       /* ===== Zones fetch/merge ===== */
       async function refreshZones({ forceServer = false } = {}) {
         const symbol = $("symbol").value.trim().toUpperCase();
@@ -1467,6 +1483,8 @@
               ? mainChart.timeScale().getVisibleLogicalRange()
               : null);
         } catch (_) {}
+
+        fetchFundingRate();
 
         const symbol = $("symbol").value.trim().toUpperCase();
         const interval = $("interval").value;

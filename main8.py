@@ -77,6 +77,30 @@ def fetch_klines(symbol: str, interval: str, limit: int = 500):
                     "l": float(x[3]), "c": float(x[4]), "v": float(x[5])})
     return out
 
+def get_funding_rate_history(symbol: str = None, startTime: int = None, endTime: int = None, limit: int = 100):
+    """
+    Binance Futures - Get Funding Rate History
+    
+    :param symbol: 거래 심볼 (예: 'BTCUSDT'), None이면 전체
+    :param startTime: 시작 시간 (ms)
+    :param endTime: 종료 시간 (ms)
+    :param limit: 반환 건수 (기본 100, 최대 1000)
+    :return: list of dict
+    """
+    url = f"{BINANCE_REST}/fapi/v1/fundingRate"
+    params = {"limit": limit}
+    
+    if symbol:
+        params["symbol"] = symbol.upper()
+    if startTime:
+        params["startTime"] = startTime
+    if endTime:
+        params["endTime"] = endTime
+
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    return response.json()
+
 def ema(series: List[float], length: int) -> List[float]:
     k = 2 / (length + 1); out=[]; prev=None
     for x in series: prev = x if prev is None else (x*k + prev*(1-k)); out.append(prev)
@@ -181,6 +205,22 @@ class WebhookIn(BaseModel):
     ts: Optional[int]=None
     secret: Optional[str]=None
 
+
+@app.get("/api/funding-rate")
+def funding_rate(
+    symbol: str | None = Query(None, description="거래 심볼, 예: BTCUSDT"),
+    startTime: int | None = Query(None, description="시작 시간 (ms)"),
+    endTime: int | None = Query(None, description="종료 시간 (ms)"),
+    limit: int = Query(100, ge=1, le=1000, description="반환 건수 (1~1000)")
+):
+    try:
+        data = get_funding_rate_history(symbol, startTime, endTime, limit)
+        return {"success": True, "data": data}
+    except requests.HTTPError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.get("/health")
 def health(): return {"ok":True, "ts": int(time.time()) + 9*3600}
 

@@ -5,9 +5,11 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.orm import sessionmaker, declarative_base
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Literal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import requests, time, os
+
+KST = timezone(timedelta(hours=9))  # UTC+9
 
 # 맨 위 import 근처에 추가
 from typing import Optional, Dict, Any
@@ -21,7 +23,7 @@ def _cache_put(sym: str, last: float, chg: Optional[float]):
         "symbol": sym.upper(),
         "last": float(last),
         "chg": (None if chg is None else float(chg)),
-        "ts": int(time.time()),
+        "ts": int(time.time()) + 9*3600,
     }
 def _cache_get(sym: str):
     return Q_CACHE.get(sym.upper())
@@ -52,7 +54,7 @@ engine = create_engine(DB_URL, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="TradingGear — SuperChart-like")
+app = FastAPI(title="TradingGear — SuperChart-like (KST)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
@@ -71,9 +73,71 @@ def fetch_klines(symbol: str, interval: str, limit: int = 500):
                 {"symbol": symbol.upper(), "interval": interval, "limit": min(limit, 1500)})
     out = []
     for x in data:
-        out.append({"t": int(x[0]) // 1000, "o": float(x[1]), "h": float(x[2]),
+        out.append({"t": (int(x[0]) // 1000) + 9*3600, "o": float(x[1]), "h": float(x[2]),
                     "l": float(x[3]), "c": float(x[4]), "v": float(x[5])})
     return out
+
+def get_funding_rate_history(symbol: str = None, startTime: int = None, endTime: int = None, limit: int = 100):
+    """
+    Binance Futures - Get Funding Rate History
+    
+    :param symbol: 거래 심볼 (예: 'BTCUSDT'), None이면 전체
+    :param startTime: 시작 시간 (ms)
+    :param endTime: 종료 시간 (ms)
+    :param limit: 반환 건수 (기본 100, 최대 1000)
+    :return: list of dict
+    """
+    url = f"{BINANCE_REST}/fapi/v1/fundingRate"
+    params = {"limit": limit}
+    
+    if symbol:
+        params["symbol"] = symbol.upper()
+    if startTime:
+        params["startTime"] = startTime
+    if endTime:
+        params["endTime"] = endTime
+
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    return response.json()
+
+def get_open_interest_hist(symbol: str, period: str = "1m", limit: int = 500, startTime: int = None, endTime: int = None):
+    """
+    Binance Futures - Open Interest History
+    :param symbol: 거래 심볼
+    :param period: "5m","15m","30m","1h","2h","4h","6h","12h","1d"
+    :param limit: 최대 500
+    :param startTime: 시작 시간 (ms)
+    :param endTime: 종료 시간 (ms)
+    :return: list of dict
+    """
+    url = f"{BINANCE_REST}/futures/data/openInterestHist"
+    params = {"symbol": symbol.upper(), "period": period, "limit": limit}
+    if startTime:
+        params["startTime"] = startTime
+    if endTime:
+        params["endTime"] = endTime
+
+    resp = requests.get(url, params=params)
+    resp.raise_for_status()
+    return resp.json()
+
+def get_order_book(symbol: str, limit: int = 100):
+    """
+    Option Trading - Get Order Book Depth
+    
+    :param symbol: 거래 심볼 (예: 'BTC-200730-9000-C')
+    :param limit: 반환할 주문 수량 (기본 100, 선택값: 10,20,50,100,500,1000)
+    :return: dict, { "T": timestamp, "u": update_id, "bids": [...], "asks": [...] }
+    """
+    url = f"{BINANCE_REST}/fapi/v1/depth"
+    
+    # 요청 파라미터
+    params = {"symbol": symbol.upper(), "limit": limit}
+    
+    response = requests.get(url, params=params)
+    response.raise_for_status()  # 오류 발생 시 예외 발생
+    return response.json()
 
 def ema(series: List[float], length: int) -> List[float]:
     k = 2 / (length + 1); out=[]; prev=None
@@ -179,8 +243,47 @@ class WebhookIn(BaseModel):
     ts: Optional[int]=None
     secret: Optional[str]=None
 
+
+@app.get("/api/open_interest_hist")
+def open_interest_hist_api(symbol: str = Query(...), period: str = Query("1m"), limit: int = Query(500)):
+    try:
+        data = get_open_interest_hist(symbol, period, limit)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/api/funding-rate")
+def funding_rate(
+    symbol: str | None = Query(None, description="거래 심볼, 예: BTCUSDT"),
+    startTime: int | None = Query(None, description="시작 시간 (ms)"),
+    endTime: int | None = Query(None, description="종료 시간 (ms)"),
+    limit: int = Query(100, ge=1, le=1000, description="반환 건수 (1~1000)")
+):
+    try:
+        data = get_funding_rate_history(symbol, startTime, endTime, limit)
+        return {"success": True, "data": data}
+    except requests.HTTPError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/order_book")
+def order_book_api(symbol: str, limit: int = 100):
+    """
+    FastAPI endpoint to get order book for a given symbol
+    Example: /api/order_book?symbol=BTC-200730-9000-C&limit=50
+    """
+    try:
+        data = get_order_book(symbol, limit)
+        return {"success": True, "data": data}
+    except requests.HTTPError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.get("/health")
-def health(): return {"ok":True, "ts": int(time.time())}
+def health(): return {"ok":True, "ts": int(time.time()) + 9*3600}
 
 @app.get("/api/klines")
 def api_klines(symbol: str = Query(...), interval: str = Query("1m"), limit: int = Query(500)):
@@ -220,7 +323,7 @@ def api_strategy_run(symbol: str = Query(...), interval: str = Query("1m"),
     written=0
     with SessionLocal() as db:
         for s in sigs:
-            ts_dt=datetime.fromtimestamp(s["ts"], tz=timezone.utc)
+            ts_dt=datetime.fromtimestamp(s["ts"], tz=timezone.utc).astimezone(KST)
             exists=db.execute(select(Signal).where(Signal.symbol==symbol.upper(),Signal.interval==interval,Signal.ts==ts_dt,Signal.side==s["side"]).limit(1)).scalar_one_or_none()
             if exists: continue
             db.add(Signal(symbol=symbol.upper(), interval=interval, side=s["side"], reason=s["reason"], price=float(s["price"]), ts=ts_dt)); written+=1
@@ -239,7 +342,7 @@ def api_signals(symbol: Optional[str]=Query(None), interval: Optional[str]=Query
 @app.post("/tv/webhook")
 def tv_webhook(inp: WebhookIn):
     if WEBHOOK_SECRET and inp.secret != WEBHOOK_SECRET: raise HTTPException(401,"invalid secret")
-    ts=inp.ts or int(time.time()); ts_dt=datetime.fromtimestamp(ts, tz=timezone.utc)
+    ts=inp.ts or int(time.time()) + 9*3600; ts_dt=datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(KST)
     with SessionLocal() as db:
         exists=db.execute(select(Signal).where(Signal.symbol==inp.symbol.upper(),Signal.interval==inp.interval,Signal.ts==ts_dt,Signal.side==inp.side).limit(1)).scalar_one_or_none()
         if not exists:
@@ -247,8 +350,10 @@ def tv_webhook(inp: WebhookIn):
     return {"ok":True,"saved":True}
 
 
+
 @app.get("/")
 def index(request: Request):
+#    return templates.TemplateResponse("index7.html", {"request": request})
     return templates.TemplateResponse("index6.html", {"request": request})
 
 # ----- [APPEND-ONLY] Superchart helpers ----- #
@@ -319,7 +424,7 @@ def api_quotes_yf(symbols: str = Query(..., description="Comma-separated friendl
         # index by Yahoo symbol
         by_y = { (row.get("symbol") or "").upper(): row for row in data }
         out = []
-        now_ts = int(_time.time())
+        now_ts = int(_time.time()) + 9*3600
         for friendly, y in zip(syms, yf_syms):
             row = by_y.get(y.upper())
             if not row:
@@ -370,10 +475,10 @@ def _binance_24h(symbol: str):
         j = r.json()
         last = float(j.get("lastPrice")) if j.get("lastPrice") is not None else None
         chg  = float(j.get("priceChangePercent")) if j.get("priceChangePercent") is not None else None
-        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
+        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
     except Exception as e:
         return {"symbol": symbol.upper(), "error": f"binance {e}"}
-
+"""
 @app.get("/api/quotes/yf")
 def api_quotes_yf(symbols: str = Query(..., description="Comma-separated symbols e.g. VIX,AAPL,EURUSD")):
     try:
@@ -386,7 +491,7 @@ def api_quotes_yf(symbols: str = Query(..., description="Comma-separated symbols
         data = r.json().get("quoteResponse", {}).get("result", [])
         by_y = { (row.get("symbol") or "").upper(): row for row in data }
         out = []
-        now_ts = int(_time.time())
+        now_ts = int(_time.time()) + 9*3600
         for friendly, y in zip(syms, yf_syms):
             row = by_y.get((y or "").upper())
             if not row:
@@ -401,7 +506,7 @@ def api_quotes_yf(symbols: str = Query(..., description="Comma-separated symbols
         return {"quotes": out}
     except Exception as e:
         return {"quotes": [{"symbol": s, "error": str(e)} for s in symbols.split(",")]}
-"""
+
 @app.get("/api/quotes/any")
 def api_quotes_any(symbols: str = Query(..., description="Comma-separated symbols, mixes Binance & YF")):
     """
@@ -473,7 +578,7 @@ def _binance_24h(symbol: str):
             j = r.json()
             last = float(j["lastPrice"])
             chg  = float(j["priceChangePercent"])
-            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
+            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
         # 선물에 없으면 Spot으로 폴백
         spot_url = "https://api.binance.com/api/v3/ticker/24hr"
         rs = requests.get(spot_url, params={"symbol": symbol.upper()}, timeout=REQUEST_TIMEOUT)
@@ -481,7 +586,7 @@ def _binance_24h(symbol: str):
             j = rs.json()
             last = float(j["lastPrice"])
             chg  = float(j["priceChangePercent"])
-            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time())}
+            return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
         return {"symbol": symbol.upper(), "error": f"binance HTTP {r.status_code}/{rs.status_code}"}
     except Exception as e:
         return {"symbol": symbol.upper(), "error": f"binance {e}"}
@@ -507,12 +612,12 @@ def _yf_fetch(friendly_syms):
         )
         if r.status_code != 200:
             # 전체 실패는 각 심볼에 상태를 심어서 반환
-            now = int(_time.time())
+            now = int(_time.time()) + 9*3600
             return [{"symbol": s, "error": f"YF HTTP {r.status_code}", "ts": now} for s in friendly_syms]
 
         data = r.json().get("quoteResponse", {}).get("result", [])
         by_y = { (row.get("symbol") or "").upper(): row for row in data }
-        now = int(_time.time())
+        now = int(_time.time()) + 9*3600
         out = []
         for friendly, y in zip(friendly_syms, mapped):
             row = by_y.get((y or "").upper())
@@ -532,7 +637,7 @@ def _yf_fetch(friendly_syms):
                 })
         return out
     except Exception as e:
-        now = int(_time.time())
+        now = int(_time.time()) + 9*3600
         return [{"symbol": s, "error": f"YF {e}", "ts": now} for s in friendly_syms]
 
 @app.get("/api/quotes/any2")
@@ -559,3 +664,164 @@ def api_quotes_any2(
     ordered = [ by.get(s, {"symbol": s, "error": "no quote source"}) for s in syms ]
     return {"quotes": ordered}
 
+
+
+# ===== [APPEND-ONLY] YF 429 Guard: cache + rate-limit + backoff =====
+import time as _time, random as _rand
+
+YF_TTL_SEC       = int(os.getenv("YF_TTL_SEC", "30"))      # cache TTL seconds
+YF_MIN_INTERVAL  = float(os.getenv("YF_MIN_INTERVAL", "1.2"))  # min interval between YF calls
+YF_MAX_RETRY     = int(os.getenv("YF_MAX_RETRY", "2"))
+YF_BACKOFF_BASE  = float(os.getenv("YF_BACKOFF_BASE", "0.8"))
+YF_BACKOFF_JIT   = float(os.getenv("YF_BACKOFF_JIT", "0.25"))
+
+_YF_CACHE: Dict[str, Dict[str, Any]] = {}
+_YF_LAST_CALL_TS = 0.0
+
+def _yf_headers():
+    return {"User-Agent": "Mozilla/5.0"}
+
+def _yf_cache_put(sym: str, last: float, chg: Optional[float]):
+    _YF_CACHE[sym] = {"ts": int(_time.time()) + 9*3600, "last": last, "chg": chg}
+
+def _yf_cache_get(sym: str):
+    v = _YF_CACHE.get(sym)
+    if not v: return None
+    if int(_time.time()) + 9*3600 - v["ts"] > YF_TTL_SEC:
+        return None
+    return v
+
+def _yf_sleep_to_rate_limit():
+    global _YF_LAST_CALL_TS
+    now = _time.time()
+    wait = (_YF_LAST_CALL_TS + YF_MIN_INTERVAL) - now
+    if wait > 0:
+        _time.sleep(wait)
+    _YF_LAST_CALL_TS = _time.time()
+
+def _yf_fetch_batch(y_syms: list[str]) -> dict:
+    out: Dict[str, Dict[str, Any]] = {}
+    if not y_syms:
+        return out
+    url = "https://query1.finance.yahoo.com/v7/finance/quote"
+    _yf_sleep_to_rate_limit()
+    retry = 0
+    while True:
+        try:
+            r = requests.get(url, params={"symbols": ",".join(y_syms)},
+                             headers=_yf_headers(), timeout=REQUEST_TIMEOUT)
+            if r.status_code == 200:
+                data = r.json().get("quoteResponse", {}).get("result", [])
+                by_y = { (row.get("symbol") or "").upper(): row for row in data }
+                now_ts = int(_time.time()) + 9*3600
+                for friendly, y in zip(y_syms, y_syms):
+                    row = by_y.get((y or "").upper())
+                    if not row:
+                        c = _yf_cache_get(friendly)
+                        if c:
+                            out[friendly] = {"last": c["last"], "chg": c["chg"], "ts": now_ts, "cached": True}
+                        else:
+                            out[friendly] = {"error": "no quote"}
+                        continue
+                    last = row.get("regularMarketPrice")
+                    chg  = row.get("regularMarketChangePercent")
+                    if last is None:
+                        c = _yf_cache_get(friendly)
+                        if c:
+                            out[friendly] = {"last": c["last"], "chg": c["chg"], "ts": now_ts, "cached": True}
+                        else:
+                            out[friendly] = {"error": "no price"}
+                    else:
+                        _yf_cache_put(friendly, float(last), float(chg) if chg is not None else None)
+                        out[friendly] = {"last": float(last), "chg": float(chg) if chg is not None else None, "ts": now_ts}
+                return out
+            elif r.status_code == 429 and retry < YF_MAX_RETRY:
+                ra = r.headers.get("Retry-After")
+                if ra:
+                    try:
+                        _time.sleep(float(ra))
+                    except:
+                        pass
+                delay = (YF_BACKOFF_BASE ** (retry+1)) + (_rand.random() * YF_BACKOFF_JIT)
+                _time.sleep(delay)
+                retry += 1
+                continue
+            else:
+                now_ts = int(_time.time()) + 9*3600
+                for friendly in y_syms:
+                    c = _yf_cache_get(friendly)
+                    if c:
+                        out[friendly] = {"last": c["last"], "chg": c["chg"], "ts": now_ts, "cached": True}
+                    else:
+                        out[friendly] = {"error": f"YF HTTP {r.status_code}"}
+                return out
+        except Exception as e:
+            now_ts = int(_time.time()) + 9*3600
+            for friendly in y_syms:
+                c = _yf_cache_get(friendly)
+                if c:
+                    out[friendly] = {"last": c["last"], "chg": c["chg"], "ts": now_ts, "cached": True}
+                else:
+                    out[friendly] = {"error": f"YF {e}"}
+            return out
+
+# ===== [REPLACE/ADD] Unified quotes endpoint (uses YF guard) =====
+from fastapi import Query as _Q
+import time as _time
+
+_YF_MAP = {
+    "VIX": "^VIX",
+    "DXY": "DX-Y.NYB",
+    "EURUSD": "EURUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "USDJPY": "USDJPY=X",
+    "AAPL": "AAPL",
+    "TSLA": "TSLA",
+    "NFLX": "NFLX",
+}
+
+def _is_binance_symbol(sym: str) -> bool:
+    s = (sym or "").upper()
+    return any(x in s for x in ("USDT", "USDC", "BTC", "ETH"))
+
+def _yf_map_list(friendly_list):
+    out = []
+    for s in friendly_list:
+        k = s.upper().strip()
+        out.append(_YF_MAP.get(k, k))
+    return out
+
+def _binance_24h(symbol: str):
+    try:
+        url = f"{BINANCE_REST}/fapi/v1/ticker/24hr"
+        r = requests.get(url, params={"symbol": symbol.upper()}, timeout=REQUEST_TIMEOUT)
+        if r.status_code != 200:
+            return {"symbol": symbol.upper(), "error": f"binance {r.status_code}"}
+        j = r.json()
+        last = float(j.get("lastPrice")) if j.get("lastPrice") is not None else None
+        chg  = float(j.get("priceChangePercent")) if j.get("priceChangePercent") is not None else None
+        return {"symbol": symbol.upper(), "last": last, "chg": chg, "ts": int(_time.time()) + 9*3600}
+    except Exception as e:
+        return {"symbol": symbol.upper(), "error": f"binance {e}"}
+
+@app.get("/api/quotes/all")
+def api_quotes_all(symbols: str = _Q(..., description="Comma-separated symbols e.g. VIX,AAPL,EURUSD,BTCUSDT")):
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    out = []
+    binance_syms = [s for s in syms if _is_binance_symbol(s)]
+    yf_syms      = [s for s in syms if not _is_binance_symbol(s)]
+    # Binance
+    for sym in binance_syms:
+        out.append(_binance_24h(sym))
+    # Yahoo
+    if yf_syms:
+        y_syms = _yf_map_list(yf_syms)
+        results = _yf_fetch_batch(y_syms)   # 429-safe
+        now_ts = int(_time.time()) + 9*3600
+        for friendly, y in zip(yf_syms, y_syms):
+            row = results.get(friendly) or results.get(y) or {}
+            if "last" in row:
+                out.append({"symbol": friendly, "last": row["last"], "chg": row.get("chg"), "ts": row.get("ts", now_ts)})
+            else:
+                out.append({"symbol": friendly, "error": row.get("error", "no quote")})
+    return {"quotes": out}
