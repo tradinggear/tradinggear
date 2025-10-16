@@ -1392,22 +1392,17 @@
           .value.trim()
           .toUpperCase();
         const interval = document.querySelector("#interval").value; // N분봉, 필요 시 활용
-        const limit = 50; // 최근 50개 데이터 사용
+        const limit = 200; // 최근 50개 데이터 사용
         const data = await fetchFundingRate(symbol, limit);
 
-        if (!data.length) {
+        if (!data.data.length) {
           document.getElementById("hud_rate").innerText = "데이터 없음";
           return;
         }
 
-        let funding_z = calculateZScore(data);
+        let funding_z = calculateZScore(data.data);
         let alertText = "";
-        // console.log("funding_z:", funding_z);
-
-        let text_funding_z =
-          funding_z < 0
-            ? Math.ceil(funding_z * 100) / 100
-            : Math.floor(funding_z * 100) / 100;
+        console.log("funding_z:", funding_z);
 
         if (funding_z > 2) alertText = "롱 과열 경고 🔥";
         else if (funding_z < -2) alertText = "숏 과열 경고 ❄️";
@@ -1415,7 +1410,7 @@
 
         document.getElementById(
           "hud_rate"
-        ).innerText = `${text_funding_z} ${alertText}`;
+        ).innerText = `${funding_z} ${alertText}`;
       }
 
       /* ===== Zones fetch/merge ===== */
