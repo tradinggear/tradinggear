@@ -8,8 +8,65 @@ from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import requests, time, os
+import logging
+import httpx
+import asyncio
 
 KST = timezone(timedelta(hours=9))  # UTC+9
+
+
+#  ----------------------- 텔레그램 봇 설정-----------------------------------------------------
+TELEGRAM_BOT_TOKEN = "8304334096:AAFPjAwdssmxpFauuGcEE5O088U-3vw7AM4"
+TELEGRAM_CHAT_ID = "7998353039"
+SEND_INTERVAL_SECONDS = 60  # 1분
+TELEGRAM_API_URL = "https://api.telegram.org"
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+_background_task = None
+_shutdown_event = asyncio.Event()
+
+SYMBOL = os.getenv("SYMBOL", "BTCUSDT")  # 분석 대상 심볼 (예: BTCUSDT)
+
+# 유틸: 현재 시각 문자열 (KST)
+# def now_kst_str() -> str:
+#     return datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+# 텔레그램 전송 함수 (비동기)
+# async def send_telegram_message(token: str, chat_id: str, text: str) -> dict:
+#     url = f"{TELEGRAM_API_URL}/bot{token}/sendMessage"
+#     payload = {"chat_id": chat_id, "text": text}
+#     async with httpx.AsyncClient(timeout=10.0) as client:
+#         resp = await client.post(url, json=payload)
+#         resp.raise_for_status()
+#         return resp.json()
+
+# # 백그라운드 루프: 주기적으로 시간 전송
+# async def periodic_time_sender():
+#     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+#         logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
+#         return
+
+#     logger.info("주기적 시간 전송 작업 시작 (간격: 4시간)", SEND_INTERVAL_SECONDS)
+#     try:
+#         while not _shutdown_event.is_set():
+#             ts = now_kst_str()
+#             text = f"현재 시각: {ts}"
+#             try:
+#                 result = await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, text)
+#                 logger.info("텔레그램 전송 성공: %s", result.get("ok"))
+#             except httpx.HTTPStatusError as e:
+#                 logger.error("Telegram API 에러: %s / 응답: %s", e, getattr(e, "response", None))
+#             except Exception as e:
+#                 logger.exception("텔레그램 전송 중 예외 발생: %s", e)
+
+#             # 다음 전송까지 대기 (정확히 60초 간격을 원하면 sleep 사용)
+#             await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
+#     finally:
+#         logger.info("주기적 시간 전송 작업 종료")
+
+# --------------------------------------------------------------------------------------------
+
 
 # 맨 위 import 근처에 추가
 from typing import Optional, Dict, Any
@@ -244,6 +301,315 @@ class WebhookIn(BaseModel):
     secret: Optional[str]=None
 
 
+# ----------------------- 텔레그램 -----------------------
+BINANCE_BASE = "https://fapi.binance.com"
+# ---------- 유틸 ----------
+def now_kst_str() -> str:
+    return datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+async def send_telegram_message(token: str, chat_id: str, text: str) -> dict:
+    url = f"{TELEGRAM_API_URL}/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(url, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ---------- 바이낸스 데이터 수집 함수 (공용 엔드포인트 사용) ----------
+async def fetch_order_book(symbol: str, limit: int = 50) -> dict:
+    url = f"{BINANCE_BASE}/fapi/v1/depth"
+    params = {"symbol": symbol, "limit": limit}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+async def fetch_recent_trades(symbol: str, limit: int = 1000) -> List[dict]:
+    # 최근 거래(회)는 public으로 가져옴
+    url = f"{BINANCE_BASE}/fapi/v1/trades"
+    params = {"symbol": symbol, "limit": limit}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+async def fetch_kline_volume(symbol: str, interval: str = "1m", limit: int = 120) -> List[dict]:
+    url = f"{BINANCE_BASE}/fapi/v1/klines"
+    params = {"symbol": symbol, "interval": interval, "limit": limit}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+async def fetch_open_interest(symbol: str) -> float:
+    url = f"{BINANCE_BASE}/fapi/v1/openInterest"
+    params = {"symbol": symbol}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+        return float(data.get("openInterest", 0))
+
+
+async def fetch_funding_rate(symbol: str) -> dict:
+    # 최근 funding rate (최근 한 건)
+    url = f"{BINANCE_BASE}/fapi/v1/fundingRate"
+    params = {"symbol": symbol, "limit": 1}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        arr = r.json()
+        return arr[0] if arr else {}
+
+
+# ---------- 지표 계산기 (단순화한 구현) ----------
+def compute_order_book_imbalance(order_book: dict, depth_levels: int = 20) -> float:
+    """
+    OB: (ask_liquidity - bid_liquidity) / total_liquidity
+    양수면 매도 우위(숏 압력), 음수면 매수 우위(롱 유리)
+    """
+    bids = order_book.get("bids", [])[:depth_levels]
+    asks = order_book.get("asks", [])[:depth_levels]
+    bid_vol = sum(float(q) for p, q in bids)
+    ask_vol = sum(float(q) for p, q in asks)
+    total = bid_vol + ask_vol
+    if total == 0:
+        return 0.0
+    imbalance = (bid_vol - ask_vol) / total  # 양수 -> bid 우위
+    return imbalance
+
+
+def compute_cvd_from_trades(trades: List[dict]) -> float:
+    """
+    CVD: 누적 매수량 - 매도량 (직접적인 차이)
+    바이낸스 trade 구조: isBuyerMaker == True 의미 '매도자가 taker(시장에서 먹음)', 즉 매도 체결로 해석
+    convention: buyer-initiated trades => isBuyerMaker == False
+    """
+    buy_vol = 0.0
+    sell_vol = 0.0
+    for t in trades:
+        qty = float(t.get("qty", t.get("quantity", 0)))
+        is_buyer_maker = t.get("isBuyerMaker", False)
+        if is_buyer_maker:
+            # taker is seller => sell initiated
+            sell_vol += qty
+        else:
+            buy_vol += qty
+    return buy_vol - sell_vol  # 양수 -> 매수 우위
+
+
+def compute_volume_spike(kline_list: List[list], lookback: int = 60, recent_window: int = 5) -> float:
+    """
+    볼륨 스파이크: 최근 recent_window 분의 합을 lookback 평균과 비교
+    반환: (recent_avg / long_avg) 비율 (1.0 이상이면 스파이크)
+    """
+    # kline format: [open_time, open, high, low, close, volume, ...]
+    volumes = [float(k[5]) for k in kline_list]
+    if len(volumes) < lookback:
+        # fallback: 전체 평균
+        long_avg = sum(volumes) / max(1, len(volumes))
+    else:
+        long_avg = sum(volumes[-lookback:]) / lookback
+    recent_avg = sum(volumes[-recent_window:]) / max(1, recent_window)
+    if long_avg == 0:
+        return 1.0
+    return recent_avg / long_avg
+
+
+def estimate_liquidation_pressure(trades: List[dict], large_trade_threshold_multiplier: float = 5.0) -> float:
+    """
+    청산맵(추정): 공개 트레이드에서 대형 테이커 물량의 비중으로 간단 추정
+    - 평균 거래량의 N배 이상인 거래를 '큰거'로 간주
+    - 큰 거래가 매도측이면 숏청산(매도 물량) / 매수측이면 롱청산 가능성
+    반환: (large_buy_vol - large_sell_vol) / total_large_vol  (-1..1)
+    """
+    qtys = [float(t.get("qty", t.get("quantity", 0))) for t in trades]
+    if not qtys:
+        return 0.0
+    avg = sum(qtys) / len(qtys)
+    threshold = avg * large_trade_threshold_multiplier
+    large_buy = 0.0
+    large_sell = 0.0
+    for t in trades:
+        qty = float(t.get("qty", t.get("quantity", 0)))
+        if qty < threshold:
+            continue
+        if t.get("isBuyerMaker", False):
+            # seller taker -> sell initiated
+            large_sell += qty
+        else:
+            large_buy += qty
+    total_large = large_buy + large_sell
+    if total_large == 0:
+        return 0.0
+    return (large_buy - large_sell) / total_large  # 양수 -> 대형 매수 우위
+
+
+# ---------- 메인 신호 집계기 ----------
+async def compute_signal_for_symbol(symbol: str) -> Dict:
+    # 1) 데이터 수집 (공용 엔드포인트만 사용 — 서명 필요시 추후 확장)
+    order_book, trades, klines, oi, funding = await asyncio.gather(
+        fetch_order_book(symbol, limit=100),
+        fetch_recent_trades(symbol, limit=1000),
+        fetch_kline_volume(symbol, interval="1m", limit=240),  # 4시간 = 240분
+        fetch_open_interest(symbol),
+        fetch_funding_rate(symbol),
+    )
+
+    # 2) 지표 계산
+    ob = compute_order_book_imbalance(order_book, depth_levels=40)  # -1..1 (음수: ask 우위)
+    cvd = compute_cvd_from_trades(trades)  # 절대값 -> 거래량 스케일에 따라 커짐
+    # 정규화: 최근 trades 합으로 나누어 -1..1 범위로 치환
+    total_trade_vol = sum(float(t.get("qty", 0)) for t in trades) or 1.0
+    cvd_norm = cvd / total_trade_vol  # -1..1 대략
+
+    oi_val = oi  # 숫자 (open interest)
+    # OI 변화(간단): we could fetch historical OI to compute change; 여기서는 OI 자체 크기로 평가(로그스케일)
+    try:
+        oi_score = (oi_val ** 0.5) if oi_val > 0 else 0.0
+    except Exception:
+        oi_score = 0.0
+
+    funding_rate = float(funding.get("fundingRate", 0.0)) if funding else 0.0
+
+    vol_spike_ratio = compute_volume_spike(klines, lookback=120, recent_window=5)  # 1이면 동일, >1 스파이크
+
+    liq_pressure = estimate_liquidation_pressure(trades)
+
+    # 3) 단순 점수 조합 (가중치)
+    # 가중치는 필요에 따라 튜닝하세요.
+    weights = {
+        "ob": 0.25,
+        "cvd": 0.20,
+        "oi": 0.10,
+        "funding": 0.15,
+        "vol_spike": 0.15,
+        "liq": 0.15,
+    }
+
+    # 각 지표를 -1..1 범위로 정규화해서 합산
+    # ob: 이미 -1..1 (bid 우위 양수)
+    ob_score = ob
+
+    # cvd_norm: -1..1
+    cvd_score = max(-1.0, min(1.0, cvd_norm))
+
+    # funding: funding >0 => long pay short (longs pay shorts) => 일반적으로 롱 부담 -> 숏이 유리
+    # 따라서 funding_score = -sign(funding) * magnitude (작게 스케일)
+    funding_score = -float(funding_rate) * 10  # scale 조정 (보통 funding은 작음)
+
+    # oi_score: 단일 값을 -1..1로 스케일 (여기선 로그 스케일 + 단순화)
+    oi_score_norm = 0.0
+    if oi_score > 0:
+        oi_score_norm = min(1.0, (oi_score / (oi_score + 1000)))  # 경험적 스케일링
+    # 중립을 0으로 하기 위해 0~1을 양수로 두고 0으로 유지 (높을수록 포지션 쏠림 -> 변동성/리스크)
+    # oi는 방향성 정보가 없으므로 절대값 항으로 처리 (약간의 혼합)
+    oi_score_norm = (oi_score_norm - 0.5) * 2  # -> -1..1 대략
+
+    # volume spike: ratio>1 -> 매수/매도 유입 가속 / 방향은 CVD와 같이 해석
+    vol_score = min(3.0, vol_spike_ratio) - 1.0  # ratio=1 -> 0, ratio=2 -> 1
+    vol_score = max(-1.0, min(1.0, vol_score))
+
+    # liq_pressure: -1..1 (양수 -> 대형 매수 우위 -> 롱 압력)
+    liq_score = liq_pressure
+
+    # 합산
+    combined = (
+        weights["ob"] * ob_score
+        + weights["cvd"] * cvd_score
+        + weights["oi"] * oi_score_norm
+        + weights["funding"] * funding_score
+        + weights["vol_spike"] * vol_score
+        + weights["liq"] * liq_score
+    )
+
+    # threshold: combined > +0.12 => '롱', < -0.12 => '숏', else '중립'
+    if combined > 0.12:
+        signal_text = "롱입니다."
+    elif combined < -0.12:
+        signal_text = "숏입니다."
+    else:
+        signal_text = "중립(관망)입니다."
+
+    # 상세 리포트
+    report = {
+        "time": now_kst_str(),
+        "symbol": symbol,
+        "signal": signal_text,
+        "score": combined,
+        "details": {
+            "order_book_imbalance": ob_score,
+            "cvd_norm": cvd_score,
+            "open_interest_norm": oi_score_norm,
+            "funding_rate": funding_rate,
+            "funding_score": funding_score,
+            "volume_spike_ratio": vol_spike_ratio,
+            "vol_score": vol_score,
+            "liquidation_pressure": liq_score,
+            "total_trade_vol_last_trades": total_trade_vol,
+        },
+    }
+    return report
+
+
+# ---------- 백그라운드: 주기적 전송 ----------
+async def periodic_time_sender():
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
+        return
+
+    logger.info("주기적 신호 전송 작업 시작 (간격: %s초)", SEND_INTERVAL_SECONDS)
+    try:
+        while not _shutdown_event.is_set():
+            try:
+                report = await compute_signal_for_symbol(SYMBOL)
+                # 메시지 형식 (간단)
+                txt = (
+                    f"심볼: {report['symbol']}\n"
+                    f"시간: {report['time']}\n"
+                    f"판단: <b>{report['signal']}</b>\n"
+                    f"점수: {report['score']:.4f}\n\n"
+                    f"세부: OB={report['details']['order_book_imbalance']:.4f}, "
+                    f"CVD={report['details']['cvd_norm']:.4f}, "
+                    f"OI_norm={report['details']['open_interest_norm']:.4f},\n"
+                    f"Funding={report['details']['funding_rate']}, VolSpike={report['details']['volume_spike_ratio']:.2f}, "
+                    f"LIQ={report['details']['liquidation_pressure']:.4f}"
+                )
+                await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, txt)
+                logger.info("텔레그램 전송 완료: %s", report['signal'])
+            except Exception as e:
+                logger.exception("신호 생성/전송 중 예외 발생: %s", e)
+
+            # 다음 전송까지 대기 (취소 이벤트를 wait로 처리)
+            await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
+    finally:
+        logger.info("주기적 신호 전송 작업 종료")
+
+# FastAPI 이벤트: 스타트업에서 백그라운드 작업 시작
+@app.on_event("startup")
+async def on_startup():
+    global _background_task
+    _background_task = asyncio.create_task(periodic_time_sender())
+
+# FastAPI 이벤트: 셧다운 시 정리
+@app.on_event("shutdown")
+async def on_shutdown():
+    if _background_task:
+        await _background_task
+
+# 간단한 헬스 체크 엔드포인트
+@app.get("/health")
+async def health():
+    return {"status": "ok", "time": now_kst_str()}
+
+
+
+# --------------------------------
 @app.get("/api/open_interest_hist")
 def open_interest_hist_api(symbol: str = Query(...), period: str = Query("1m"), limit: int = Query(500)):
     try:
