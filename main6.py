@@ -11,14 +11,22 @@ import requests, time, os
 import logging
 import httpx
 import asyncio
+from collections import defaultdict, deque
+import math
+
 
 KST = timezone(timedelta(hours=9))  # UTC+9
 
 
 #  ----------------------- 텔레그램 봇 설정-----------------------------------------------------
+# 런타임 캐시: 이전 OI 저장 (symbol -> last_oi)
+oi_cache: Dict[str, float] = {}
+# (옵션) 과거 klines의 수를 제한해서 메모리 사용 관리
+klines_cache: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
+
 TELEGRAM_BOT_TOKEN = "8304334096:AAFPjAwdssmxpFauuGcEE5O088U-3vw7AM4"
 TELEGRAM_CHAT_ID = "7998353039"
-SEND_INTERVAL_SECONDS = 60  # 1분
+SEND_INTERVAL_SECONDS = 120  # 1분
 TELEGRAM_API_URL = "https://api.telegram.org"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -303,6 +311,374 @@ class WebhookIn(BaseModel):
 
 # ----------------------- 텔레그램 -----------------------
 BINANCE_BASE = "https://fapi.binance.com"
+
+def vwap_from_klines(klines: List[list]) -> float:
+    """단순 VWAP 계산 (klines 리스트 전체 기준). klines: [open_time, open, high, low, close, volume, ...]"""
+    pv_sum = 0.0
+    vol_sum = 0.0
+    for k in klines:
+        high = float(k[2])
+        low = float(k[3])
+        close = float(k[4])
+        typical = (high + low + close) / 3.0
+        vol = float(k[5])
+        pv_sum += typical * vol
+        vol_sum += vol
+    return pv_sum / vol_sum if vol_sum > 0 else 0.0
+
+async def fetch_klines_for_interval(symbol: str, interval: str = "4h", limit: int = 100) -> List[list]:
+    url = f"{BINANCE_BASE}/fapi/v1/klines"
+    params = {"symbol": symbol, "interval": interval, "limit": limit}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        kl = r.json()
+        # 캐시 관리 (optional)
+        klines_cache[symbol].extend(kl)
+        return kl
+
+def check_ob_touch(order_book: dict, mark_price: float, side: str = "long", proximity_pct: float = 0.005) -> bool:
+    """
+    OB 터치/근접 체크.
+    - side == 'long' : Demand OB (매수존) -> 체크: 큰 bid 벽이 현재 가격보다 아래에 근접하게 위치
+    - side == 'short': Supply OB (매도존) -> 체크: 큰 ask 벽이 현재 가격보다 위에 근접하게 위치
+    proximity_pct: 가격 대비 몇 % 이내면 '근접'으로 판단 (ex: 0.005 -> 0.5%)
+    """
+    bids = order_book.get("bids", [])
+    asks = order_book.get("asks", [])
+    if not bids or not asks:
+        return False
+    # 큰 벽을 정하는 기준: 상위 N 레벨에서 양이 평균보다 큰 수준
+    def find_wall(levels):
+        # levels: list[(price_str, qty_str)]
+        prices = [float(p) for p, q in levels]
+        qtys = [float(q) for p, q in levels]
+        avg = sum(qtys) / max(1, len(qtys))
+        # 가장 큰 레벨(양이 평균의 2배 이상) 찾기
+        for p, q in levels:
+            if float(q) >= avg * 2.0:
+                return float(p), float(q)
+        # fallback: best price
+        return float(levels[0][0]), float(levels[0][1])
+
+    best_bid_price, _ = find_wall(bids[:40])
+    best_ask_price, _ = find_wall(asks[:40])
+
+    if side == "long":
+        # Demand OB -> bid wall below or very near current price
+        if best_bid_price <= mark_price and (mark_price - best_bid_price) / mark_price <= proximity_pct:
+            return True
+    else:
+        # Supply OB -> ask wall above or very near
+        if best_ask_price >= mark_price and (best_ask_price - mark_price) / mark_price <= proximity_pct:
+            return True
+    return False
+
+def check_volume_spike_4h(klines_4h: List[list], lookback: int = 20, multiplier: float = 1.8, require_bullish: bool = True) -> bool:
+    """
+    4H 볼륨 스파이크: 최근 1캔들(가장 최신)의 volume >= lookback 평균 * multiplier
+    require_bullish: 양봉(종가>시가)인지 확인
+    """
+    if not klines_4h or len(klines_4h) < 2:
+        return False
+    volumes = [float(k[5]) for k in klines_4h]
+    lookback = min(len(volumes) - 1, lookback)  # 최신 캔들 제외하고 평균 계산
+    if lookback <= 0:
+        return False
+    long_avg = sum(volumes[-1 - lookback:-1]) / lookback
+    recent_vol = volumes[-1]
+    if long_avg == 0:
+        return False
+    ratio = recent_vol / long_avg
+    if ratio < multiplier:
+        return False
+    # 캔들 방향 체크
+    open_p = float(klines_4h[-1][1])
+    close_p = float(klines_4h[-1][4])
+    if require_bullish:
+        return close_p > open_p
+    else:
+        return close_p < open_p
+    
+    
+def estimate_heatmap_proximity(order_book: dict, mark_price: float, side: str = "long", proximity_pct: float = 0.02) -> bool:
+    """
+    호가벽을 이용한 '청산 밀집 레벨 근접' 휴리스틱
+    - side == long: 하단(현재가 대비 아래)에 대형 매수벽이 집중되어 있으면 '숏청산 밀집'으로 간주(=롱 유리)
+    - side == short: 상단에 대형 매도벽이 집중되어 있으면 '롱청산 밀집'으로 간주(=숏 유리)
+    proximity_pct: 가격 대비 범위 (ex 0.02 -> 2%)
+    """
+    bids = order_book.get("bids", [])
+    asks = order_book.get("asks", [])
+    if side == "long":
+        # 하단에 큰 bid 벽 존재하는지 확인 (price < mark_price, within proximity_pct)
+        threshold_price = mark_price * (1 - proximity_pct)
+        large_qty = 0.0
+        total_qty = 0.0
+        for p_str, q_str in bids[:200]:
+            p = float(p_str)
+            q = float(q_str)
+            if p >= threshold_price:
+                total_qty += q
+                if q >= 0.5:  # 절대적 큰량 기준 (튜닝 가능)
+                    large_qty += q
+        # 비율 기반 판단
+        if total_qty == 0:
+            return False
+        return (large_qty / total_qty) >= 0.4  # 40% 이상이 큰벽이면 근접 판단
+    else:
+        # 상단에 큰 ask 벽 존재
+        threshold_price = mark_price * (1 + proximity_pct)
+        large_qty = 0.0
+        total_qty = 0.0
+        for p_str, q_str in asks[:200]:
+            p = float(p_str)
+            q = float(q_str)
+            if p <= threshold_price:
+                total_qty += q
+                if q >= 0.5:
+                    large_qty += q
+        if total_qty == 0:
+            return False
+        return (large_qty / total_qty) >= 0.4
+
+def compute_cvd_recent(trades: List[dict], lookback: int = 1000) -> float:
+    """최근 trades를 이용한 CVD 비율 (정규화된 -1..1)"""
+    if not trades:
+        return 0.0
+    qtys = trades[-lookback:]
+    buy = 0.0
+    sell = 0.0
+    for t in qtys:
+        q = float(t.get("qty", t.get("quantity", 0)))
+        if t.get("isBuyerMaker", False):
+            sell += q
+        else:
+            buy += q
+    total = buy + sell or 1.0
+    return (buy - sell) / total  # -1..1
+
+
+# ---------- 메인: 4H 기반 scoring 함수 ----------
+async def compute_4h_signal_for_symbol(symbol: str) -> Dict:
+    """
+    4H 캔들마다 실행하여 LONG / SHORT 각각 0..6 점수 산출.
+    score >= 5 인 경우 신호 생성.
+    """
+    # 데이터 수집
+    order_book, trades_1m, klines_1m, klines_4h, oi_val, funding = await asyncio.gather(
+        fetch_order_book(symbol, limit=500),
+        fetch_recent_trades(symbol, limit=1000),
+        fetch_kline_volume(symbol, interval="1m", limit=240),
+        fetch_klines_for_interval(symbol, interval="4h", limit=100),
+        fetch_open_interest(symbol),
+        fetch_funding_rate(symbol),
+    )
+
+    # 현재 마크/최근 가격 (1분 klines 마지막 close)
+    mark_price = None
+    if klines_1m:
+        mark_price = float(klines_1m[-1][4])
+    else:
+        # fallback: best bid/ask mid
+        bids = order_book.get("bids", [])
+        asks = order_book.get("asks", [])
+        if bids and asks:
+            mark_price = (float(bids[0][0]) + float(asks[0][0])) / 2
+        else:
+            mark_price = 0.0
+
+    # 1) OB 터치/근접
+    ob_long = check_ob_touch(order_book, mark_price, side="long", proximity_pct=0.005)
+    ob_short = check_ob_touch(order_book, mark_price, side="short", proximity_pct=0.005)
+
+    # 2) CVD 매수/매도 우위 (정규화)
+    cvd_ratio = compute_cvd_recent(trades_1m, lookback=1000)
+    cvd_long = cvd_ratio > 0.08  # 임계값(튜닝). 0.08 => 매도/매수 차이가 8% 이상
+    cvd_short = cvd_ratio < -0.08
+
+    # 3) OI 증가(이전 캔들 대비) - 메모리 기반 비교
+    oi_increase_long = False
+    oi_increase_short = False
+    prev_oi = oi_cache.get(symbol)
+    try:
+        oi_now = float(oi_val)
+    except Exception:
+        oi_now = 0.0
+    if prev_oi is not None and prev_oi > 0:
+        # 증가 비율을 보고 long/short 판단은 불명확하므로 'OI 증가' 자체로 양방 체크 가능.
+        oi_delta = (oi_now - prev_oi) / prev_oi
+        # 양수면 포지션 유입( 방향성은 분리 판단 어려움 ) -> 둘다 +1 후보로 삼지 않고
+        # 특정 방향으로 추정하려면 CVD/price action과 결합하여 판단
+        if oi_delta > 0.02:  # 2% 이상 증가
+            # 방향성 추정: 만약 CVD가 매수 우위면 롱 유입으로 판단, 그렇지 않으면 숏 유입으로는 반대
+            if cvd_ratio > 0:
+                oi_increase_long = True
+            elif cvd_ratio < 0:
+                oi_increase_short = True
+            else:
+                # 중립일 때는 OI만으로는 판단 안함 (둘 다 False)
+                pass
+    # 업데이트 캐시
+    oi_cache[symbol] = oi_now
+
+    # 4) VWAP 재진입 + TEMA30 방향
+    # TEMA30 on 4H closes
+    closes_4h = [float(k[4]) for k in klines_4h]
+    tema30 = tema(closes_4h, 30) if len(closes_4h) >= 30 else None
+    tema_up = False
+    tema_down = False
+    if tema30 and len(tema30) >= 2:
+        if tema30[-1] > tema30[-2]:
+            tema_up = True
+        elif tema30[-1] < tema30[-2]:
+            tema_down = True
+
+    # VWAP (4h series) 재진입: 현재(=최근 캔들 종가)가 VWAP을 다시 돌파(롱) 또는 하향 이탈(숏)
+    vwap_4h = vwap_from_klines(klines_4h[-50:]) if klines_4h else 0.0
+    last_close = closes_4h[-1] if closes_4h else mark_price
+    # 기초 조건: 이전 캔들에서 가격이 VWAP 반대편에 있고, 현재는 재진입
+    vwap_reentry_long = False
+    vwap_reentry_short = False
+    if len(closes_4h) >= 2:
+        prev_close = closes_4h[-2]
+        # reentry long: prev_close < vwap and last_close > vwap
+        if prev_close < vwap_4h and last_close > vwap_4h and tema_up:
+            vwap_reentry_long = True
+        # reentry short: prev_close > vwap and last_close < vwap and tema_down
+        if prev_close > vwap_4h and last_close < vwap_4h and tema_down:
+            vwap_reentry_short = True
+
+    # 5) Volume spike
+    vol_spike_long = check_volume_spike_4h(klines_4h, lookback=20, multiplier=1.8, require_bullish=True)
+    vol_spike_short = check_volume_spike_4h(klines_4h, lookback=20, multiplier=1.8, require_bullish=False)
+
+    # 6) Heatmap 근접(휴리스틱)
+    heatmap_long = estimate_heatmap_proximity(order_book, mark_price, side="long", proximity_pct=0.02)
+    heatmap_short = estimate_heatmap_proximity(order_book, mark_price, side="short", proximity_pct=0.02)
+
+    # Funding filter: 펀딩이 과열이면 반대편 유리 -> 여기서는 단순히 magnitude 판단
+    funding_rate = float(funding.get("fundingRate", 0.0)) if funding else 0.0
+    # funding positive: longs pay shorts -> longs 부담 -> penalize long signals by requiring stronger evidence
+    funding_penalty_long = funding_rate > 0.0005  # 임계값 튜닝 가능
+    funding_penalty_short = funding_rate < -0.0005
+
+    # 점수 산정 (각 항목 True -> +1)
+    long_score = 0
+    long_score += 1 if ob_long else 0
+    long_score += 1 if cvd_long else 0
+    long_score += 1 if oi_increase_long else 0
+    long_score += 1 if vwap_reentry_long else 0
+    long_score += 1 if vol_spike_long else 0
+    long_score += 1 if heatmap_long else 0
+
+    short_score = 0
+    short_score += 1 if ob_short else 0
+    short_score += 1 if cvd_short else 0
+    short_score += 1 if oi_increase_short else 0
+    short_score += 1 if vwap_reentry_short else 0
+    short_score += 1 if vol_spike_short else 0
+    short_score += 1 if heatmap_short else 0
+
+    # Funding filter 적용: 펀딩이 과열인 쪽은 score 낮추기 (선택적 정책)
+    if funding_penalty_long:
+        # 롱에 불리하면 1점 차감(최저 0)
+        long_score = max(0, long_score - 1)
+    if funding_penalty_short:
+        short_score = max(0, short_score - 1)
+
+    # 신호 판단
+    long_signal = None
+    short_signal = None
+    if long_score >= 5:
+        long_signal = "LONG"
+        long_strength = "High Conviction" if long_score == 6 else "Strong"
+    if short_score >= 5:
+        short_signal = "SHORT"
+        short_strength = "High Conviction" if short_score == 6 else "Strong"
+
+    # 상세 리포트 구조화
+    report = {
+        "time": now_kst_str(),
+        "symbol": symbol,
+        "mark_price": mark_price,
+        "funding_rate": funding_rate,
+        "long": {
+            "score": long_score,
+            "signal": long_signal,
+            "strength": long_strength if long_signal else None,
+            "components": {
+                "ob_touch": ob_long,
+                "cvd_bull": cvd_long,
+                "oi_increase": oi_increase_long,
+                "vwap_reentry_tema_up": vwap_reentry_long,
+                "volume_spike": vol_spike_long,
+                "heatmap_proximity": heatmap_long,
+            },
+        },
+        "short": {
+            "score": short_score,
+            "signal": short_signal,
+            "strength": short_strength if short_signal else None,
+            "components": {
+                "ob_touch": ob_short,
+                "cvd_bear": cvd_short,
+                "oi_increase": oi_increase_short,
+                "vwap_reentry_tema_down": vwap_reentry_short,
+                "volume_spike": vol_spike_short,
+                "heatmap_proximity": heatmap_short,
+            },
+        },
+        "raw": {
+            "cvd_ratio": cvd_ratio,
+            "oi_now": oi_now,
+            "oi_prev": prev_oi,
+            "tema30_last": tema30[-1] if tema30 else None,
+            "vwap_4h": vwap_4h,
+        },
+    }
+    return report
+
+
+# ---------- 주기적 전송(기존 periodic_time_sender를 대체하거나 통합) ----------
+async def periodic_time_sender():
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
+        return
+
+    logger.info("주기적 신호 전송 작업 시작 (간격: %s초)", SEND_INTERVAL_SECONDS)
+    try:
+        while not _shutdown_event.is_set():
+            try:
+                report = await compute_4h_signal_for_symbol(SYMBOL)
+
+                # 신호 메시지: LONG / SHORT 둘 다 나올 수 있음(희귀)
+                txt_lines = [
+                    f"심볼: {report['symbol']}",
+                    f"시간: {report['time']}",
+                    f"가격: {report['mark_price']}",
+                    f"펀딩: {report['funding_rate']}",
+                    "",
+                    f"▶ LONG 점수: {report['long']['score']} ",
+                    f"  구성: OB={report['long']['components']['ob_touch']}, CVD={report['long']['components']['cvd_bull']}, OI_increase={report['long']['components']['oi_increase']}, VWAP+TEMA={report['long']['components']['vwap_reentry_tema_up']}, VolSpike={report['long']['components']['volume_spike']}, Heatmap={report['long']['components']['heatmap_proximity']}",
+                    "",
+                    f"▶ SHORT 점수: {report['short']['score']} ",
+                    f"  구성: OB={report['short']['components']['ob_touch']}, CVD={report['short']['components']['cvd_bear']}, OI_increase={report['short']['components']['oi_increase']}, VWAP+TEMA={report['short']['components']['vwap_reentry_tema_down']}, VolSpike={report['short']['components']['volume_spike']}, Heatmap={report['short']['components']['heatmap_proximity']}",
+                    "",
+                    "※ 조건: score >= 5 => 진입 후보 (6: High Conviction, 5: Strong).",
+                ]
+                txt = "\n".join(txt_lines)
+                await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, txt)
+                logger.info("텔레그램 전송 완료: LONG %s / SHORT %s", report['long']['score'], report['short']['score'])
+            except Exception as e:
+                logger.exception("신호 생성/전송 중 예외 발생: %s", e)
+
+            await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
+    finally:
+        logger.info("주기적 신호 전송 작업 종료")
+
+
+
 # ---------- 유틸 ----------
 def now_kst_str() -> str:
     return datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -558,37 +934,37 @@ async def compute_signal_for_symbol(symbol: str) -> Dict:
 
 
 # ---------- 백그라운드: 주기적 전송 ----------
-async def periodic_time_sender():
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
-        return
+# async def periodic_time_sender():
+#     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+#         logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
+#         return
 
-    logger.info("주기적 신호 전송 작업 시작 (간격: %s초)", SEND_INTERVAL_SECONDS)
-    try:
-        while not _shutdown_event.is_set():
-            try:
-                report = await compute_signal_for_symbol(SYMBOL)
-                # 메시지 형식 (간단)
-                txt = (
-                    f"심볼: {report['symbol']}\n"
-                    f"시간: {report['time']}\n"
-                    f"판단: <b>{report['signal']}</b>\n"
-                    f"점수: {report['score']:.4f}\n\n"
-                    f"세부: OB={report['details']['order_book_imbalance']:.4f}, "
-                    f"CVD={report['details']['cvd_norm']:.4f}, "
-                    f"OI_norm={report['details']['open_interest_norm']:.4f},\n"
-                    f"Funding={report['details']['funding_rate']}, VolSpike={report['details']['volume_spike_ratio']:.2f}, "
-                    f"LIQ={report['details']['liquidation_pressure']:.4f}"
-                )
-                await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, txt)
-                logger.info("텔레그램 전송 완료: %s", report['signal'])
-            except Exception as e:
-                logger.exception("신호 생성/전송 중 예외 발생: %s", e)
+#     logger.info("주기적 신호 전송 작업 시작 (간격: %s초)", SEND_INTERVAL_SECONDS)
+#     try:
+#         while not _shutdown_event.is_set():
+#             try:
+#                 report = await compute_signal_for_symbol(SYMBOL)
+#                 # 메시지 형식 (간단)
+#                 txt = (
+#                     f"심볼: {report['symbol']}\n"
+#                     f"시간: {report['time']}\n"
+#                     f"판단: <b>{report['signal']}</b>\n"
+#                     f"점수: {report['score']:.4f}\n\n"
+#                     f"세부: OB={report['details']['order_book_imbalance']:.4f}, "
+#                     f"CVD={report['details']['cvd_norm']:.4f}, "
+#                     f"OI_norm={report['details']['open_interest_norm']:.4f},\n"
+#                     f"Funding={report['details']['funding_rate']}, VolSpike={report['details']['volume_spike_ratio']:.2f}, "
+#                     f"LIQ={report['details']['liquidation_pressure']:.4f}"
+#                 )
+#                 await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, txt)
+#                 logger.info("텔레그램 전송 완료: %s", report['signal'])
+#             except Exception as e:
+#                 logger.exception("신호 생성/전송 중 예외 발생: %s", e)
 
-            # 다음 전송까지 대기 (취소 이벤트를 wait로 처리)
-            await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
-    finally:
-        logger.info("주기적 신호 전송 작업 종료")
+#             # 다음 전송까지 대기 (취소 이벤트를 wait로 처리)
+#             await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
+#     finally:
+#         logger.info("주기적 신호 전송 작업 종료")
 
 # FastAPI 이벤트: 스타트업에서 백그라운드 작업 시작
 @app.on_event("startup")
