@@ -2639,10 +2639,18 @@
           // 클릭하면 차트로 로드
           el.addEventListener("click", async () => {
             const inp = document.getElementById("symbol");
+
             if (inp) inp.value = item.binanceSymbol || item.sym;
+            console.log("이건가?:", inp.value);
             if (window.loadAll) {
               await window.loadAll();
               refreshCard(item.sym);
+              // 사용자가 드롭다운 등에서 심볼 선택 시
+              fetch("/update_symbol", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ symbol: inp.value }),
+              });
             }
           });
           return el;

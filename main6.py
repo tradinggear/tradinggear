@@ -25,9 +25,9 @@ oi_cache: Dict[str, float] = {}
 klines_cache: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 
 TELEGRAM_BOT_TOKEN = "8304334096:AAFPjAwdssmxpFauuGcEE5O088U-3vw7AM4"
-TELEGRAM_CHAT_ID = "7998353039" # 테스트 개발자용 chat_id
-# TELEGRAM_CHAT_ID = "6699396349" # 대표님 chat_id 
-SEND_INTERVAL_SECONDS = 1800  # 30분
+# TELEGRAM_CHAT_ID = "7998353039" # 테스트 개발자용 chat_id
+TELEGRAM_CHAT_ID = "6699396349" # 대표님 chat_id 
+SEND_INTERVAL_SECONDS = 1800  # 30분 = 1800
 TELEGRAM_API_URL = "https://api.telegram.org"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -37,44 +37,6 @@ _shutdown_event = asyncio.Event()
 
 # SYMBOL = os.getenv("SYMBOL", "BTCUSDT")  # 분석 대상 심볼 (예: BTCUSDT)
 SYMBOL = "BTCUSDT"
-
-# 유틸: 현재 시각 문자열 (KST)
-# def now_kst_str() -> str:
-#     return datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S %Z")
-
-# 텔레그램 전송 함수 (비동기)
-# async def send_telegram_message(token: str, chat_id: str, text: str) -> dict:
-#     url = f"{TELEGRAM_API_URL}/bot{token}/sendMessage"
-#     payload = {"chat_id": chat_id, "text": text}
-#     async with httpx.AsyncClient(timeout=10.0) as client:
-#         resp = await client.post(url, json=payload)
-#         resp.raise_for_status()
-#         return resp.json()
-
-# # 백그라운드 루프: 주기적으로 시간 전송
-# async def periodic_time_sender():
-#     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-#         logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
-#         return
-
-#     logger.info("주기적 시간 전송 작업 시작 (간격: 4시간)", SEND_INTERVAL_SECONDS)
-#     try:
-#         while not _shutdown_event.is_set():
-#             ts = now_kst_str()
-#             text = f"현재 시각: {ts}"
-#             try:
-#                 result = await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, text)
-#                 logger.info("텔레그램 전송 성공: %s", result.get("ok"))
-#             except httpx.HTTPStatusError as e:
-#                 logger.error("Telegram API 에러: %s / 응답: %s", e, getattr(e, "response", None))
-#             except Exception as e:
-#                 logger.exception("텔레그램 전송 중 예외 발생: %s", e)
-
-#             # 다음 전송까지 대기 (정확히 60초 간격을 원하면 sleep 사용)
-#             await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
-#     finally:
-#         logger.info("주기적 시간 전송 작업 종료")
-
 # --------------------------------------------------------------------------------------------
 
 
@@ -936,37 +898,31 @@ async def compute_signal_for_symbol(symbol: str) -> Dict:
 
 
 # ---------- 백그라운드: 주기적 전송 ----------
-# async def periodic_time_sender():
-#     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-#         logger.error("TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되어 있지 않습니다. 백그라운드 작업을 중단합니다.")
-#         return
 
-#     logger.info("주기적 신호 전송 작업 시작 (간격: %s초)", SEND_INTERVAL_SECONDS)
-#     try:
-#         while not _shutdown_event.is_set():
-#             try:
-#                 report = await compute_signal_for_symbol(SYMBOL)
-#                 # 메시지 형식 (간단)
-#                 txt = (
-#                     f"심볼: {report['symbol']}\n"
-#                     f"시간: {report['time']}\n"
-#                     f"판단: <b>{report['signal']}</b>\n"
-#                     f"점수: {report['score']:.4f}\n\n"
-#                     f"세부: OB={report['details']['order_book_imbalance']:.4f}, "
-#                     f"CVD={report['details']['cvd_norm']:.4f}, "
-#                     f"OI_norm={report['details']['open_interest_norm']:.4f},\n"
-#                     f"Funding={report['details']['funding_rate']}, VolSpike={report['details']['volume_spike_ratio']:.2f}, "
-#                     f"LIQ={report['details']['liquidation_pressure']:.4f}"
-#                 )
-#                 await send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, txt)
-#                 logger.info("텔레그램 전송 완료: %s", report['signal'])
-#             except Exception as e:
-#                 logger.exception("신호 생성/전송 중 예외 발생: %s", e)
+class SymbolUpdate(BaseModel):
+    symbol: str
 
-#             # 다음 전송까지 대기 (취소 이벤트를 wait로 처리)
-#             await asyncio.wait([_shutdown_event.wait()], timeout=SEND_INTERVAL_SECONDS)
-#     finally:
-#         logger.info("주기적 신호 전송 작업 종료")
+@app.post("/update_symbol")
+async def update_symbol(data: SymbolUpdate):
+    global SYMBOL, _background_task, _shutdown_event
+
+    SYMBOL = data.symbol.upper()
+    print(f"[심볼 변경] 새로운 SYMBOL: {SYMBOL}")
+    logger.info(f"[심볼 변경] 새로운 SYMBOL: {SYMBOL}")
+
+    # 기존 작업 종료 후 새로 시작
+    if _background_task:
+        _shutdown_event.set()           # 기존 루프 종료 신호
+        try:
+            await _background_task     # 기존 task 기다리기
+        except asyncio.CancelledError:
+            pass
+        # 새 shutdown 이벤트 생성
+        _shutdown_event = asyncio.Event()
+        _background_task = asyncio.create_task(periodic_time_sender())
+
+    return {"status": "ok", "symbol": SYMBOL}
+
 
 # FastAPI 이벤트: 스타트업에서 백그라운드 작업 시작
 @app.on_event("startup")
