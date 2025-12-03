@@ -4170,6 +4170,18 @@
 
         // initial
         document.addEventListener("DOMContentLoaded", () => {
+          // SOLUSDT 행 선택
+          const solRow = document.querySelector('.wl-row[data-sym="SOLUSDT"]');
+          if (solRow) {
+            solRow.addEventListener("click", () => {
+              fetch("/update_symbol", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ symbol: "SOLUSDT" }),
+              });
+            });
+          }
+
           try {
             ensureSeries();
             updateATRStoch();

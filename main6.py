@@ -27,7 +27,7 @@ klines_cache: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 TELEGRAM_BOT_TOKEN = "8304334096:AAFPjAwdssmxpFauuGcEE5O088U-3vw7AM4"
 # TELEGRAM_CHAT_ID = "7998353039" # 테스트 개발자용 chat_id
 TELEGRAM_CHAT_ID = "6699396349" # 대표님 chat_id 
-SEND_INTERVAL_SECONDS = 1800  # 30분 = 1800
+SEND_INTERVAL_SECONDS = 60  # 30분 = 1800
 TELEGRAM_API_URL = "https://api.telegram.org"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
