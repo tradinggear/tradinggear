@@ -273,7 +273,7 @@
           <button class="toolbtn" data-tool="cursor">커서</button>
           <button class="toolbtn" data-tool="trend">트렌드</button>
           <button class="toolbtn" data-tool="hline">수평선</button>
-          <button class="toolbtn" data-tool="rect">박스</button>
+          <!-- <button class="toolbtn" data-tool="rect">박스</button> -->
           <button class="toolbtn" data-tool="ruler" style="display: none">
             룰러
           </button>
@@ -496,6 +496,8 @@
         replayTimer = null;
       let isReplayPlaying = false; // 현재 리플레이 중인지를 표시하는 변수 (true일 경우, 자동갱신을 막는다.)
 
+      let prevSymbol = null; // 이전 심볼
+
       // 사용자 인터렉션 기억
       let userInteracted = false, // 사용자가 직접 차트를 조작(줌/팬)했는지 여부
         lastVisibleRange = null; // 마지막으로 보고 있던 차트 구간(뷰포트 범위) 저장
@@ -625,9 +627,24 @@
       }
       const dpr = window.devicePixelRatio || 1;
 
+      // 수직 스케일 리셋 함수(필요하면 scaleMargins 등도 넣어 조절)
+      function resetPriceScale(chart) {
+        try {
+          // 기본 좌/우 스케일을 자동스케일로 돌리기
+          chart.priceScale("right")?.applyOptions?.({ autoScale: true });
+          chart.priceScale("left")?.applyOptions?.({ autoScale: true });
+
+          // 보통은 timeScale.fitContent()로 수평도 같이 맞춰주면 깔끔합니다.
+          // (원하면 주석 처리)
+          chart.timeScale()?.fitContent?.();
+        } catch (e) {
+          console.warn("[resetPriceScale]", e);
+        }
+      }
+
       /* ===== Chart Build ===== */
       function buildCharts() {
-        // console.log("콘솔이 나오기는 하니");
+        console.log("콘솔이 나오기는 하니");
         const m = $("chartMain"),
           s = $("chartSub"),
           ovM = $("overlayMain"),
@@ -1558,6 +1575,12 @@
         const symbol = $("symbol").value.trim().toUpperCase();
         const interval = $("interval").value;
 
+        // 심볼 변경 감지: 이전 심볼이 존재하고 현재와 다르면 리셋
+        if (prevSymbol && prevSymbol !== symbol) {
+          resetPriceScale(mainChart);
+        }
+        prevSymbol = symbol; // 현재 심볼을 저장
+
         updateFundingRateAlert();
 
         lastKs = await fetch(
@@ -1764,15 +1787,30 @@
         }
         // === Preserve current zoom/pan if the user interacted; otherwise fit once ===
         try {
+          // const prevRange = __snapshotRange;
+          // if (prevRange && isFinite(prevRange.from) && isFinite(prevRange.to)) {
+          //   __isRestoring = true;
+          //   mainChart.timeScale().setVisibleLogicalRange(prevRange);
+          //   subChart.timeScale().setVisibleLogicalRange(prevRange);
+          //   __isRestoring = false;
+          // } else {
+          //   mainChart.timeScale().fitContent();
+          // }
           const prevRange = __snapshotRange;
-          if (prevRange && isFinite(prevRange.from) && isFinite(prevRange.to)) {
+          if (
+            !userInteracted &&
+            prevRange &&
+            isFinite(prevRange.from) &&
+            isFinite(prevRange.to)
+          ) {
             __isRestoring = true;
             mainChart.timeScale().setVisibleLogicalRange(prevRange);
             subChart.timeScale().setVisibleLogicalRange(prevRange);
             __isRestoring = false;
-          } else {
+          } else if (!userInteracted) {
             mainChart.timeScale().fitContent();
           }
+          // userInteracted가 true면 사용자가 움직인 위치 유지
         } catch (e) {
           console.warn("[view restore @loadAll]", e);
         }
@@ -3829,6 +3867,19 @@
             timer = setTimeout(to, timeoutMs);
           });
         }
+
+        // *************추가**************
+
+        ["pointerup", "wheel", "touchend"].forEach((evt) =>
+          document.addEventListener(evt, () => {
+            userInteracted = true;
+            if (mainChart && mainChart.timeScale) {
+              lastVisibleRange = mainChart.timeScale().getVisibleLogicalRange();
+            }
+          })
+        );
+
+        //********************************
 
         ready(() => {
           const autoBtn = document.createElement("button");

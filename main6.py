@@ -25,8 +25,9 @@ oi_cache: Dict[str, float] = {}
 klines_cache: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
 
 TELEGRAM_BOT_TOKEN = "8304334096:AAFPjAwdssmxpFauuGcEE5O088U-3vw7AM4"
-TELEGRAM_CHAT_ID = "7998353039"
-SEND_INTERVAL_SECONDS = 120  # 1분
+TELEGRAM_CHAT_ID = "7998353039" # 테스트 개발자용 chat_id
+# TELEGRAM_CHAT_ID = "6699396349" # 대표님 chat_id 
+SEND_INTERVAL_SECONDS = 1800  # 30분
 TELEGRAM_API_URL = "https://api.telegram.org"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -34,7 +35,8 @@ logger = logging.getLogger(__name__)
 _background_task = None
 _shutdown_event = asyncio.Event()
 
-SYMBOL = os.getenv("SYMBOL", "BTCUSDT")  # 분석 대상 심볼 (예: BTCUSDT)
+# SYMBOL = os.getenv("SYMBOL", "BTCUSDT")  # 분석 대상 심볼 (예: BTCUSDT)
+SYMBOL = "BTCUSDT"
 
 # 유틸: 현재 시각 문자열 (KST)
 # def now_kst_str() -> str:
