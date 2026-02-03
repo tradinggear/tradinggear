@@ -196,10 +196,192 @@
         border: 1px solid var(--line);
         border-radius: 999px;
       }
+      .mobile-h2 {
+        display: none;
+      }
+      /* =========================
+   SAFE MOBILE UI (NO CHART TOUCH)
+   ========================= */
+      /* =========================
+   MOBILE SUPERCHART UI v2
+   (ALL VISIBLE, ORDERED)
+   ========================= */
+      @media (max-width: 900px) {
+        body {
+          overflow: hidden;
+        }
+
+        .wrap {
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+
+        /* =====================
+     1. CHART AREA (TOP)
+     ===================== */
+        .charts {
+          order: 1;
+          height: 58vh;
+          grid-template-rows: 3fr 1.2fr;
+          background: var(--bg);
+        }
+
+        .pane {
+          border-bottom: 1px solid var(--line);
+        }
+
+        /* =====================
+     2. PRICE / HUD CARDS
+     ===================== */
+        .hud-inline {
+          order: 2;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 8px;
+          padding: 10px;
+          background: var(--bg);
+          border-bottom: 1px solid var(--line);
+        }
+
+        .hud-inline .card {
+          background: var(--panel);
+          border-radius: 16px;
+          padding: 8px 6px;
+          font-size: 12px;
+          text-align: center;
+        }
+
+        /* =====================
+     3. CONTROL AREA
+     ===================== */
+        header {
+          order: 3;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 10px;
+          background: var(--bg);
+          overflow-y: auto;
+          max-height: 42vh;
+        }
+
+        header .group {
+          background: var(--panel);
+          border-radius: 16px;
+          padding: 8px;
+          gap: 8px;
+        }
+
+        /* =====================
+     3-1. PRIMARY ACTIONS
+     ===================== */
+        header .group:nth-of-type(1) {
+          display: grid;
+          grid-template-columns: 1.2fr 1fr 1fr;
+          gap: 8px;
+        }
+
+        #loadBtn,
+        #runStratBtn {
+          background: var(--accent);
+          color: #fff;
+          font-weight: 600;
+          border-radius: 16px;
+        }
+
+        header input,
+        header select {
+          font-size: 14px;
+          min-height: 44px;
+          border-radius: 14px;
+        }
+
+        header button {
+          min-height: 44px;
+          font-size: 14px;
+          border-radius: 14px;
+        }
+
+        /* =====================
+     3-2. DRAWING TOOLS
+     ===================== */
+        header .group:nth-of-type(3),
+        header .group:nth-of-type(4) {
+          display: grid;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 6px;
+        }
+
+        .toolbtn {
+          background: var(--panel2);
+          font-size: 12px;
+          border-radius: 12px;
+          padding: 8px 4px;
+        }
+
+        .toolbtn.active {
+          background: var(--accent);
+          color: #fff;
+        }
+
+        /* =====================
+     3-3. INDICATOR TOGGLES
+     ===================== */
+        header .group:nth-of-type(2) {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 6px;
+          opacity: 0.85;
+        }
+
+        header .group:nth-of-type(2) label {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          padding: 8px 4px;
+          background: var(--panel2);
+          border-radius: 12px;
+          text-align: center;
+        }
+
+        /* =====================
+     3-4. COMPARE / REPLAY
+     ===================== */
+        header .group:nth-of-type(5),
+        header .group:nth-of-type(6) {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          font-size: 12px;
+          opacity: 0.85;
+        }
+
+        header input[type="range"] {
+          min-height: 36px;
+        }
+
+        /* =====================
+     4. FOOTER (LOW PRIORITY)
+     ===================== */
+        .footer {
+          order: 4;
+          font-size: 11px;
+          padding: 8px;
+          text-align: center;
+          background: var(--panel);
+          border-top: 1px solid var(--line);
+        }
+        .mobile-h2 {
+          display: block;
+        }
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
+      <h2 class="mobile-h2" style="display: none">차트</h2>
       <!-- Top Bar -->
       <header>
         <div class="group">
